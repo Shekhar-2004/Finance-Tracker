@@ -1,31 +1,113 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Set Budget</title>
+    <title>Set Budget - Finance Tracker</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     
     <style>
-        /* Include the shared styles from above */
-        /* ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #2d3748;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .navbar {
+            background: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            margin-bottom: 2rem;
+        }
+
+        .nav-links {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2.5rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .welcome-text {
+            color: #4a5568;
+            margin-bottom: 2.5rem;
+            text-align: center;
+            font-size: 1.1rem;
+            line-height: 1.8;
+        }
 
         .budget-form {
-            text-align: center;
             max-width: 400px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .budget-input-container {
+            position: relative;
+        }
+
+        .budget-input-container label {
+            display: block;
+            margin-bottom: 0.75rem;
+            color: #4a5568;
+            font-weight: 500;
         }
 
         .budget-input {
             position: relative;
-            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
         }
 
-        .budget-input::before {
-            content: '₹';
+        .currency-symbol {
             position: absolute;
             left: 1rem;
-            top: 50%;
-            transform: translateY(-50%);
             color: #4a5568;
             font-weight: 500;
         }
@@ -33,42 +115,156 @@
         .budget-input input {
             width: 100%;
             padding: 1rem 1rem 1rem 2.5rem;
-            font-size: 1.25rem;
+            font-size: 1.1rem;
             border: 2px solid #e2e8f0;
             border-radius: 8px;
             transition: all 0.3s ease;
+            background: #f8fafc;
         }
 
         .budget-input input:focus {
             outline: none;
             border-color: #4299e1;
             box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+            background: white;
         }
 
-        .welcome-text {
-            color: #4a5568;
-            margin-bottom: 2rem;
-            text-align: center;
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 8px;
+            font-weight: 500;
             font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        button:hover {
+            background: #3182ce;
+            transform: translateY(-1px);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .feature-item {
+            text-align: center;
+            padding: 1.5rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .feature-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            color: #4299e1;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-description {
+            color: #718096;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
-    <div class="container fade-in">
-        <h1>Welcome to Your Financial Tracker</h1>
-        <p class="welcome-text">Let's start by setting up your monthly budget</p>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="#" style="pointer-events: none; opacity: 0.6;">
+                <i class="material-icons">account_balance_wallet</i>
+                Finance Tracker
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Welcome to Your Finance Tracker</h1>
+        <p class="welcome-text">
+            Take control of your finances with our easy-to-use expense tracking system.<br>
+            Let's start by setting up your monthly budget.
+        </p>
         
         <form method="POST" class="budget-form">
-            <div class="budget-input">
-                <input type="number" 
-                       step="0.01" 
-                       name="budget" 
-                       required 
-                       placeholder="Enter your monthly budget"
-                       min="0">
+            <div class="budget-input-container">
+                <label for="budget">Monthly Budget Amount</label>
+                <div class="budget-input">
+                    <span class="currency-symbol">₹</span>
+                    <input type="number" 
+                           id="budget"
+                           name="budget" 
+                           step="0.01" 
+                           required 
+                           placeholder="Enter your monthly budget"
+                           min="0"
+                           autocomplete="off">
+                </div>
             </div>
-            <button type="submit">Set Budget & Continue</button>
+            <button type="submit">
+                <i class="material-icons">arrow_forward</i>
+                Get Started
+            </button>
         </form>
+
+        <div class="features-grid">
+            <div class="feature-item">
+                <i class="material-icons feature-icon">receipt</i>
+                <div class="feature-title">Daily Tracking</div>
+                <div class="feature-description">Track your expenses easily on a daily basis</div>
+            </div>
+            <div class="feature-item">
+                <i class="material-icons feature-icon">calendar_today</i>
+                <div class="feature-title">Calendar View</div>
+                <div class="feature-description">Visualize spending patterns over time</div>
+            </div>
+            <div class="feature-item">
+                <i class="material-icons feature-icon">insights</i>
+                <div class="feature-title">Smart Summary</div>
+                <div class="feature-description">Get insights into your spending habits</div>
+            </div>
+        </div>
     </div>
+
+    <script>
+        // Add input validation
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const budget = document.getElementById('budget').value;
+            if (budget <= 0) {
+                e.preventDefault();
+                alert('Please enter a valid budget amount greater than 0');
+            }
+        });
+
+        // Add animation on input focus
+        const input = document.getElementById('budget');
+        input.addEventListener('focus', function() {
+            this.parentElement.style.transform = 'scale(1.02)';
+        });
+        input.addEventListener('blur', function() {
+            this.parentElement.style.transform = 'scale(1)';
+        });
+    </script>
 </body>
 </html>
