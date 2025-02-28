@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monthly Summary</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* Include the shared styles from above */
+        /* ... */
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .stat-card .label {
+            color: #4a5568;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+
+        .insights-container {
+            background: #f7fafc;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-top: 2rem;
+        }
+
+        .insight-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .insight-icon {
+            color: #4299e1;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="/expense">
+                <i class="material-icons">receipt</i>
+                Daily Expenses
+            </a>
+            <a href="/calendar">
+                <i class="material-icons">calendar_today</i>
+                Calendar
+            </a>
+            <a href="/summary">
+                <i class="material-icons">insights</i>
+                Summary
+            </a>
+        </div>
+    </nav>
+
+    <div class="container fade-in">
+        <h1>Monthly Financial Summary</h1>
+
+        <div class="summary-grid">
+            <div class="stat-card">
+                <div class="label">Total Spent</div>
+                <div class="value">₹<span id="totalSpent">0.00</span></div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Remaining Budget</div>
+                <div class="value">₹<span id="remainingBudget">0.00</span></div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="pieChart"></canvas>
+        </div>
+
+        <div class="insights-container">
+            <h2>Insights</h2>
+            <div id="insights"></div>
+        </div>
+    </div>
+
+    <script>
+        async function loadSummary() {
+            const response = await fetch('/api/summary');
+            const data = await response.json();
+            
+            document.getElementById('totalSpent').textContent = data.total_spent.toFixed(2);
+            document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
+
+            const ctx = document.getElementById('pieChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(data.category_totals),
+                    datasets: [{
+                        data: Object.values(data.category_totals),
+                        backgroundColor: [
+                            '#4299E1', // blue
+                            '#48BB78', // green
+                            '#ED8936', // orange
+                            '#9F7AEA', // purple
+                            '#F56565'  // red
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            const insightsDiv = document.getElementById('insights');
+            let insights = '';
+            
+            // Find highest spending category
+            let maxCategory = null, maxAmount = 0;
+            for (const [category, amount] of Object.entries(data.category_totals)) {
+                if (amount > maxAmount) {
+                    maxAmount = amount;
+                    maxCategory = category;
+                }
+            }
+
+            if (maxCategory) {
+                insights += `
+                    <div class="insight-item">
+                        <i class="material-icons insight-icon">trending_up</i>
+                        <div>
+                            <strong>Highest Spending Category:</strong>
+                            <br>${maxCategory} (₹${maxAmount.toFixed(2)})
+                        </div>
+                    </div>`;
+            }
+
+            // Add budget status insight
+            const budgetStatus = data.remaining_budget > 0 ? 'positive' : 'negative';
+            insights += `
+                <div class="insight-item">
+                    <i class="material-icons insight-icon">${budgetStatus === 'positive' ? 'check_circle' : 'warning'}</i>
+                    <div>
+                        <strong>Budget Status:</strong>
+                        <br>${budgetStatus === 'positive' ? 'You are within your budget!' : 'You have exceeded your budget.'}
+                    </div>
+                </div>`;
+
+            insightsDiv.innerHTML = insights;
+        }
+        
+        loadSummary();
+    </script>
+</body>
+</html>

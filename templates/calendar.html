@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Calendar View</title>
+    
+    <!-- FullCalendar CSS -->
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css' rel='stylesheet' />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #2d3748;
+        }
+
+        .navbar {
+            background: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            margin-bottom: 2rem;
+        }
+
+        .nav-links {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+
+        #calendar {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        /* FullCalendar Customization */
+        .fc {
+            --fc-border-color: #e2e8f0;
+            --fc-button-bg-color: #4299e1;
+            --fc-button-border-color: #4299e1;
+            --fc-button-hover-bg-color: #3182ce;
+            --fc-button-hover-border-color: #3182ce;
+            --fc-button-active-bg-color: #2c5282;
+            --fc-button-active-border-color: #2c5282;
+        }
+
+        .fc .fc-button {
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+        }
+
+        .fc .fc-daygrid-day {
+            transition: background-color 0.2s;
+        }
+
+        .fc .fc-daygrid-day:hover {
+            background-color: #f7fafc;
+        }
+
+        /* Modal Styling */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            z-index: 1001;
+            min-width: 400px;
+            max-width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideIn 0.3s ease;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #718096;
+            transition: color 0.2s;
+        }
+
+        .close-button:hover {
+            color: #2d3748;
+        }
+
+        .expense-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 1rem;
+        }
+
+        .expense-table th,
+        .expense-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .expense-table th {
+            background: #f7fafc;
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .expense-table tr:last-child td {
+            border-bottom: none;
+            font-weight: 600;
+        }
+
+        .amount {
+            font-family: 'Inter', monospace;
+            text-align: right;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translate(-50%, -60%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%);
+                opacity: 1;
+            }
+        }
+
+        /* Event Styling */
+        .fc-event {
+            border-radius: 4px;
+            padding: 2px 4px;
+            font-size: 0.875rem;
+            transition: transform 0.2s;
+        }
+
+        .fc-event:hover {
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="/expense">
+                <i class="material-icons" style="vertical-align: middle;">receipt</i>
+                Daily Expenses
+            </a>
+            <a href="/summary">
+                <i class="material-icons" style="vertical-align: middle;">insights</i>
+                Summary
+            </a>
+        </div>
+    </nav>
+
+    <div id='calendar'></div>
+
+    <!-- Modal Structure -->
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="modal" id="expenseModal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalDate"></h3>
+            <button class="close-button" onclick="closeModal()">
+                <i class="material-icons">close</i>
+            </button>
+        </div>
+        <div id="modalContent"></div>
+    </div>
+
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+    <script>
+        function closeModal() {
+            document.getElementById('modalOverlay').style.display = 'none';
+            document.getElementById('expenseModal').style.display = 'none';
+        }
+
+        function showExpenseModal(date, expenses) {
+            const modal = document.getElementById('expenseModal');
+            const overlay = document.getElementById('modalOverlay');
+            const modalDate = document.getElementById('modalDate');
+            const modalContent = document.getElementById('modalContent');
+            
+            modalDate.textContent = new Date(date).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            let content = '<table class="expense-table">';
+            content += '<thead><tr><th>Category</th><th>Amount</th></tr></thead><tbody>';
+            
+            let total = 0;
+            for (const [category, amount] of Object.entries(expenses)) {
+                content += `<tr>
+                    <td>${category}</td>
+                    <td class="amount">₹${parseFloat(amount).toLocaleString('en-IN', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    })}</td>
+                </tr>`;
+                total += parseFloat(amount);
+            }
+            
+            content += `<tr>
+                <td>Total</td>
+                <td class="amount">₹${total.toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                })}</td>
+            </tr></tbody>`;
+            content += '</table>';
+            
+            modalContent.innerHTML = content;
+            overlay.style.display = 'block';
+            modal.style.display = 'block';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('modalOverlay').addEventListener('click', closeModal);
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const calendarEl = document.getElementById('calendar');
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,dayGridWeek,dayGridDay'
+                },
+                dateClick: function(info) {
+                    fetch(`/api/expenses?date=${info.dateStr}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            showExpenseModal(info.dateStr, data);
+                        })
+                        .catch(error => console.error('Error:', error));
+                },
+                events: function(info, successCallback, failureCallback) {
+                    fetch(`/api/expenses?start=${info.startStr}&end=${info.endStr}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            const events = [];
+                            for (const [date, expenseData] of Object.entries(data)) {
+                                events.push({
+                                    title: `₹${expenseData.total.toLocaleString('en-IN')}`,
+                                    start: date,
+                                    allDay: true,
+                                    backgroundColor: '#48bb78',
+                                    borderColor: '#48bb78',
+                                    description: Object.entries(expenseData.categories)
+                                        .map(([cat, amt]) => `${cat}: ₹${amt.toLocaleString('en-IN')}`)
+                                        .join('\n')
+                                });
+                            }
+                            successCallback(events);
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            failureCallback(error);
+                        });
+                }
+            });
+            calendar.render();
+        });
+    </script>
+</body>
+</html>

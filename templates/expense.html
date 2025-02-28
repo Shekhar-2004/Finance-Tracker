@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Daily Expenses</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .navbar {
+            background: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            margin-bottom: 2rem;
+        }
+
+        .nav-links {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links a:hover {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .expense-form {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .expense-item {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .expense-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        label {
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        button {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        button:hover {
+            background: #3182ce;
+            transform: translateY(-1px);
+        }
+
+        .summary-panel {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .summary-item span:last-child {
+            font-weight: 600;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+        }
+
+        .modal {
+            position: relative;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+            margin: 10vh auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .edit-button {
+            background: none;
+            border: none;
+            padding: 0.25rem;
+            margin: 0;
+            cursor: pointer;
+            color: #4a5568;
+            width: auto;
+        }
+
+        .edit-button:hover {
+            color: #2d3748;
+            transform: none;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .budget-input-container {
+            margin-bottom: 1.5rem;
+        }
+
+        .budget-input-container label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .budget-input {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .currency-symbol {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #4a5568;
+        }
+
+        .budget-input input {
+            width: 100%;
+            padding: 0.75rem 0.75rem 0.75rem 2rem;
+        }
+
+        .modal button {
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        /* Animation for modal */
+        @keyframes modalSlideIn {
+            from {
+                transform: translate(-50%, -60%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%);
+                opacity: 1;
+            }
+        }
+
+        .modal.show {
+            display: block;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="/expense">
+                <i class="material-icons">receipt</i>
+                Daily Expenses
+            </a>
+            <a href="/calendar">
+                <i class="material-icons">calendar_today</i>
+                Calendar
+            </a>
+            <a href="/summary">
+                <i class="material-icons">insights</i>
+                Summary
+            </a>
+        </div>
+    </nav>
+
+    <!-- Budget Update Modal -->
+    <div class="modal-overlay" id="budgetModal">
+        <div class="modal" id="budgetModalContent">
+            <div class="modal-header">
+                <h3>Modify Monthly Budget</h3>
+                <button class="edit-button" onclick="closeBudgetModal()">
+                    <i class="material-icons">close</i>
+                </button>
+            </div>
+            <div class="modal-content">
+                <div class="budget-input-container">
+                    <label for="newBudget">New Budget Amount</label>
+                    <div class="budget-input">
+                        <span class="currency-symbol">₹</span>
+                        <input type="number" 
+                               id="newBudget" 
+                               step="0.01" 
+                               placeholder="Enter new budget amount"
+                               min="0">
+                    </div>
+                </div>
+                <button onclick="updateBudget()">Update Budget</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container fade-in">
+        <h1>Daily Expenses for {{ today }}</h1>
+        
+        <div class="expense-form">
+            {% for category in categories %}
+            <div class="expense-item">
+                <label for="{{ category }}">{{ category }}</label>
+                <input type="number" 
+                       step="0.01" 
+                       id="{{ category }}" 
+                       value="{{ expenses.get(category, 0) }}" 
+                       oninput="calculateDailyTotal()">
+            </div>
+            {% endfor %}
+            
+            <button onclick="submitExpenses()">Save Expenses</button>
+        </div>
+
+        <div class="summary-panel">
+            <div class="summary-item">
+                <span>Total Spent Today:</span>
+                <span>₹<span id="dailyTotal">0.00</span></span>
+            </div>
+            <div class="summary-item">
+                <span>Monthly Budget:</span>
+                <span>
+                    ₹<span id="currentBudget">0.00</span>
+                    <button class="edit-button" onclick="showBudgetModal()">
+                        <i class="material-icons">edit</i>
+                    </button>
+                </span>
+            </div>
+            <div class="summary-item">
+                <span>Remaining Budget:</span>
+                <span>₹<span id="remainingBudget">0.00</span></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Convert Jinja2 variable to JavaScript array
+        const categories = JSON.parse('{{ categories|tojson|safe }}' || '[]');
+
+        // Function to calculate the total daily expenses
+        function calculateDailyTotal() {
+            let total = 0;
+            categories.forEach(category => {
+                const inputElement = document.getElementById(category);
+                if (inputElement) {
+                    total += parseFloat(inputElement.value) || 0;
+                }
+            });
+            document.getElementById('dailyTotal').textContent = total.toFixed(2);
+            return total;
+        }
+
+        // Function to update the remaining budget
+        async function updateRemainingBudget() {
+            const response = await fetch('/api/summary');
+            const data = await response.json();
+            document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
+            document.getElementById('currentBudget').textContent = (data.remaining_budget + data.total_spent).toFixed(2);
+        }
+
+        // Function to submit expenses
+        async function submitExpenses() {
+            const expenseData = {};
+            categories.forEach(category => {
+                const inputElement = document.getElementById(category);
+                if (inputElement) {
+                    expenseData[category] = inputElement.value || '0';
+                }
+            });
+
+            const data = {
+                date: '{{ today }}',
+                categories: expenseData
+            };
+
+            await fetch('/add_expense', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            await updateRemainingBudget();
+        }
+
+        // Initialize calculations when the page loads
+        calculateDailyTotal();
+        updateRemainingBudget();
+
+        function showBudgetModal() {
+            const modal = document.getElementById('budgetModal');
+            const budgetInput = document.getElementById('newBudget');
+            const currentBudget = document.getElementById('currentBudget').textContent;
+            
+            budgetInput.value = currentBudget;
+            modal.classList.add('show');
+            budgetInput.focus();
+        }
+
+        function closeBudgetModal() {
+            const modal = document.getElementById('budgetModal');
+            modal.classList.remove('show');
+        }
+
+        async function updateBudget() {
+            const newBudget = document.getElementById('newBudget').value;
+            
+            if (!newBudget || parseFloat(newBudget) <= 0) {
+                alert('Please enter a valid budget amount');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/update_budget', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        budget: parseFloat(newBudget)
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('currentBudget').textContent = parseFloat(newBudget).toFixed(2);
+                    await updateRemainingBudget();
+                    closeBudgetModal();
+                    
+                    // Show success message
+                    alert('Budget updated successfully!');
+                } else {
+                    const error = await response.json();
+                    alert(error.message || 'Failed to update budget. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to update budget. Please try again.');
+            }
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('budgetModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeBudgetModal();
+            }
+        });
+
+        // Handle Enter key in budget input
+        document.getElementById('newBudget').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                updateBudget();
+            }
+        });
+    </script>
+</body>
+</html>

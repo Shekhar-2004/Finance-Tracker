@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Set Budget</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        /* Include the shared styles from above */
+        /* ... */
+
+        .budget-form {
+            text-align: center;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .budget-input {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .budget-input::before {
+            content: '₹';
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .budget-input input {
+            width: 100%;
+            padding: 1rem 1rem 1rem 2.5rem;
+            font-size: 1.25rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .budget-input input:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .welcome-text {
+            color: #4a5568;
+            margin-bottom: 2rem;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container fade-in">
+        <h1>Welcome to Your Financial Tracker</h1>
+        <p class="welcome-text">Let's start by setting up your monthly budget</p>
+        
+        <form method="POST" class="budget-form">
+            <div class="budget-input">
+                <input type="number" 
+                       step="0.01" 
+                       name="budget" 
+                       required 
+                       placeholder="Enter your monthly budget"
+                       min="0">
+            </div>
+            <button type="submit">Set Budget & Continue</button>
+        </form>
+    </div>
+</body>
+</html>
