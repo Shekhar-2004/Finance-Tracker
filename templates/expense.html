@@ -324,6 +324,27 @@
         .date-nav-btn i {
             color: #4a5568;
         }
+
+        .success-message {
+            background-color: #48BB78;
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 1rem;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
@@ -437,35 +458,120 @@
             return total;
         }
 
-        // Function to update the remaining budget
-        async function updateRemainingBudget() {
-            const response = await fetch('/api/summary');
-            const data = await response.json();
-            document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
-            document.getElementById('currentBudget').textContent = (data.remaining_budget + data.total_spent).toFixed(2);
+        // Modify the existing JavaScript
+        let lastLoadedDate = null;
+
+        // Optimize the loadExpensesForDate function
+        async function loadExpensesForDate(dateStr) {
+            // Prevent reloading if the date hasn't changed
+            if (dateStr === lastLoadedDate) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/expenses?date=${dateStr}`);
+                const data = await response.json();
+                
+                // Reset all inputs to 0
+                categories.forEach(category => {
+                    const input = document.getElementById(category);
+                    input.value = '0';
+                });
+
+                // Set the values from the response
+                for (const [category, amount] of Object.entries(data)) {
+                    const input = document.getElementById(category);
+                    if (input) {
+                        input.value = amount;
+                    }
+                }
+
+                calculateDailyTotal();
+                await updateRemainingBudget();
+                lastLoadedDate = dateStr;
+            } catch (error) {
+                console.error('Error loading expenses:', error);
+            }
         }
 
-        // Function to submit expenses
+        // Optimize the updateRemainingBudget function with debouncing
+        const debounce = (func, wait) => {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        };
+
+        const updateRemainingBudget = debounce(async () => {
+            try {
+                const response = await fetch('/api/summary');
+                const data = await response.json();
+                document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
+                document.getElementById('currentBudget').textContent = (data.remaining_budget + data.total_spent).toFixed(2);
+            } catch (error) {
+                console.error('Error updating budget:', error);
+            }
+        }, 300); // Wait 300ms between updates
+
+        // Update the dateChanged function
+        async function dateChanged() {
+            const newDate = dateInput.value;
+            if (newDate !== lastLoadedDate) {
+                currentDate = new Date(newDate);
+                await loadExpensesForDate(newDate);
+            }
+        }
+
+        // Update the submitExpenses function
         async function submitExpenses() {
             const expenseData = {};
+            let hasChanges = false;
+            
             categories.forEach(category => {
                 const inputElement = document.getElementById(category);
                 if (inputElement) {
-                    expenseData[category] = inputElement.value || '0';
+                    const value = inputElement.value || '0';
+                    expenseData[category] = value;
+                    hasChanges = true;
                 }
             });
 
+            if (!hasChanges) {
+                return; // Don't submit if nothing changed
+            }
+
             const data = {
-                date: '{{ today }}',
+                date: dateInput.value,
                 categories: expenseData
             };
 
-            await fetch('/add_expense', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            await updateRemainingBudget();
+            try {
+                const response = await fetch('/add_expense', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    await updateRemainingBudget();
+                    // Show success message
+                    const successMessage = document.createElement('div');
+                    successMessage.className = 'success-message';
+                    successMessage.textContent = 'Expenses saved successfully!';
+                    document.querySelector('.container').prepend(successMessage);
+                    setTimeout(() => successMessage.remove(), 3000);
+                } else {
+                    throw new Error('Failed to save expenses');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to save expenses. Please try again.');
+            }
         }
 
         // Initialize calculations when the page loads
@@ -554,39 +660,6 @@
             loadExpensesForDate(dateInput.value);
         }
 
-        // Load expenses for a specific date
-        async function loadExpensesForDate(dateStr) {
-            try {
-                const response = await fetch(`/api/expenses?date=${dateStr}`);
-                const data = await response.json();
-                
-                // Reset all inputs to 0
-                categories.forEach(category => {
-                    const input = document.getElementById(category);
-                    input.value = '0';
-                });
-
-                // Set the values from the response
-                for (const [category, amount] of Object.entries(data)) {
-                    const input = document.getElementById(category);
-                    if (input) {
-                        input.value = amount;
-                    }
-                }
-
-                calculateDailyTotal();
-                await updateRemainingBudget();
-            } catch (error) {
-                console.error('Error loading expenses:', error);
-            }
-        }
-
-        // Handle date change from input
-        async function dateChanged() {
-            currentDate = new Date(dateInput.value);
-            await loadExpensesForDate(dateInput.value);
-        }
-
         // Navigate to previous day
         async function previousDay() {
             currentDate.setDate(currentDate.getDate() - 1);
@@ -599,41 +672,6 @@
             currentDate.setDate(currentDate.getDate() + 1);
             dateInput.value = formatDateForInput(currentDate);
             await loadExpensesForDate(dateInput.value);
-        }
-
-        // Update the submitExpenses function
-        async function submitExpenses() {
-            const expenseData = {};
-            categories.forEach(category => {
-                const inputElement = document.getElementById(category);
-                if (inputElement) {
-                    expenseData[category] = inputElement.value || '0';
-                }
-            });
-
-            const data = {
-                date: dateInput.value,
-                categories: expenseData
-            };
-
-            try {
-                const response = await fetch('/add_expense', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                if (response.ok) {
-                    await updateRemainingBudget();
-                    // Show success message
-                    alert('Expenses saved successfully!');
-                } else {
-                    alert('Failed to save expenses. Please try again.');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Failed to save expenses. Please try again.');
-            }
         }
 
         // Initialize date and load expenses when page loads
