@@ -41,22 +41,12 @@ def index():
 
 @app.route('/expense')
 def expense():
-    # Define categories
     categories = ['Auto', 'Online Food', 'College Mess', 'Instamart', 'Miscellaneous']
     
-    # Get today's date
-    today = datetime.now().date()
-    
-    # Get existing expenses for today
-    expenses = Expense.query.filter_by(date=today).all()
-    expense_dict = {e.category: e.amount for e in expenses}
-    
-    # Pass ALL required variables to the template
+    # No need to pass today's date as it will be handled by JavaScript
     return render_template(
         'expense.html',
-        categories=categories,  # <-- Add this line
-        expenses=expense_dict,
-        today=today.isoformat()
+        categories=categories
     )
 
 @app.route('/add_expense', methods=['POST'])

@@ -271,6 +271,59 @@
             display: block;
             animation: modalSlideIn 0.3s ease-out;
         }
+
+        .date-selector {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .current-date {
+            text-align: center;
+        }
+
+        .current-date input[type="date"] {
+            font-size: 1.2rem;
+            padding: 0.5rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            color: #2d3748;
+            background: #f8fafc;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .current-date input[type="date"]:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+
+        .date-nav-btn {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 0.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            width: 40px;
+            height: 40px;
+        }
+
+        .date-nav-btn:hover {
+            background: #edf2f7;
+            transform: translateY(-1px);
+        }
+
+        .date-nav-btn i {
+            color: #4a5568;
+        }
     </style>
 </head>
 <body>
@@ -318,7 +371,18 @@
     </div>
 
     <div class="container fade-in">
-        <h1>Daily Expenses for {{ today }}</h1>
+        <div class="date-selector">
+            <button onclick="previousDay()" class="date-nav-btn">
+                <i class="material-icons">chevron_left</i>
+            </button>
+            <div class="current-date">
+                <input type="date" id="expenseDate" onchange="dateChanged()">
+                <h1>Daily Expenses</h1>
+            </div>
+            <button onclick="nextDay()" class="date-nav-btn">
+                <i class="material-icons">chevron_right</i>
+            </button>
+        </div>
         
         <div class="expense-form">
             {% for category in categories %}
@@ -472,6 +536,117 @@
             if (event.key === 'Enter') {
                 event.preventDefault();
                 updateBudget();
+            }
+        });
+
+        // Initialize date handling
+        let currentDate = new Date();
+        const dateInput = document.getElementById('expenseDate');
+
+        // Format date for input value (YYYY-MM-DD)
+        function formatDateForInput(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        // Initialize with today's date
+        function initializeDate() {
+            dateInput.value = formatDateForInput(currentDate);
+            loadExpensesForDate(dateInput.value);
+        }
+
+        // Load expenses for a specific date
+        async function loadExpensesForDate(dateStr) {
+            try {
+                const response = await fetch(`/api/expenses?date=${dateStr}`);
+                const data = await response.json();
+                
+                // Reset all inputs to 0
+                categories.forEach(category => {
+                    const input = document.getElementById(category);
+                    input.value = '0';
+                });
+
+                // Set the values from the response
+                for (const [category, amount] of Object.entries(data)) {
+                    const input = document.getElementById(category);
+                    if (input) {
+                        input.value = amount;
+                    }
+                }
+
+                calculateDailyTotal();
+                await updateRemainingBudget();
+            } catch (error) {
+                console.error('Error loading expenses:', error);
+            }
+        }
+
+        // Handle date change from input
+        async function dateChanged() {
+            currentDate = new Date(dateInput.value);
+            await loadExpensesForDate(dateInput.value);
+        }
+
+        // Navigate to previous day
+        async function previousDay() {
+            currentDate.setDate(currentDate.getDate() - 1);
+            dateInput.value = formatDateForInput(currentDate);
+            await loadExpensesForDate(dateInput.value);
+        }
+
+        // Navigate to next day
+        async function nextDay() {
+            currentDate.setDate(currentDate.getDate() + 1);
+            dateInput.value = formatDateForInput(currentDate);
+            await loadExpensesForDate(dateInput.value);
+        }
+
+        // Update the submitExpenses function
+        async function submitExpenses() {
+            const expenseData = {};
+            categories.forEach(category => {
+                const inputElement = document.getElementById(category);
+                if (inputElement) {
+                    expenseData[category] = inputElement.value || '0';
+                }
+            });
+
+            const data = {
+                date: dateInput.value,
+                categories: expenseData
+            };
+
+            try {
+                const response = await fetch('/add_expense', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    await updateRemainingBudget();
+                    // Show success message
+                    alert('Expenses saved successfully!');
+                } else {
+                    alert('Failed to save expenses. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to save expenses. Please try again.');
+            }
+        }
+
+        // Initialize date and load expenses when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDate();
+        });
+
+        // Add keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft') {
+                previousDay();
+            } else if (e.key === 'ArrowRight') {
+                nextDay();
             }
         });
     </script>
