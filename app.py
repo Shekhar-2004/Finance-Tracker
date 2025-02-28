@@ -6,6 +6,7 @@ from flask_login import UserMixin, LoginManager, login_required, current_user
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///finance.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'your-secret-key-here'
 db = SQLAlchemy(app)
 
 # Initialize Flask-Login
