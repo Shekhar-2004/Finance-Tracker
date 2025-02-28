@@ -412,7 +412,7 @@
                 <input type="number" 
                        step="0.01" 
                        id="{{ category }}" 
-                       value="0"
+                       placeholder="0.00"
                        oninput="calculateDailyTotal()">
             </div>
             {% endfor %}
@@ -450,7 +450,7 @@
             let total = 0;
             categories.forEach(category => {
                 const inputElement = document.getElementById(category);
-                if (inputElement) {
+                if (inputElement && inputElement.value !== '') {
                     total += parseFloat(inputElement.value) || 0;
                 }
             });
@@ -463,25 +463,25 @@
 
         // Optimize the loadExpensesForDate function
         async function loadExpensesForDate(dateStr) {
-            // Prevent reloading if the date hasn't changed
             if (dateStr === lastLoadedDate) {
                 return;
             }
             
             try {
-                const response = await fetch(`/api/expenses?date=${dateStr}`);
-                const data = await response.json();
-                
-                // Reset all inputs to 0
+                // Reset all inputs to empty
                 categories.forEach(category => {
                     const input = document.getElementById(category);
-                    input.value = '0';
+                    input.value = '';
+                    input.placeholder = '0.00';
                 });
 
-                // Set the values from the response
+                const response = await fetch(`/api/expenses?date=${dateStr}`);
+                const data = await response.json();
+
+                // Only set values if there are existing expenses
                 for (const [category, amount] of Object.entries(data)) {
                     const input = document.getElementById(category);
-                    if (input) {
+                    if (input && amount > 0) {
                         input.value = amount;
                     }
                 }
@@ -534,15 +534,16 @@
             
             categories.forEach(category => {
                 const inputElement = document.getElementById(category);
-                if (inputElement) {
-                    const value = inputElement.value || '0';
-                    expenseData[category] = value;
+                if (inputElement && inputElement.value !== '') {
+                    expenseData[category] = inputElement.value;
                     hasChanges = true;
+                } else {
+                    expenseData[category] = '0';
                 }
             });
 
             if (!hasChanges) {
-                return; // Don't submit if nothing changed
+                return;
             }
 
             const data = {
@@ -656,6 +657,7 @@
 
         // Initialize with today's date
         function initializeDate() {
+            currentDate = new Date();
             dateInput.value = formatDateForInput(currentDate);
             loadExpensesForDate(dateInput.value);
         }
@@ -677,7 +679,7 @@
         // Initialize date and load expenses when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeDate();
-            initializeExpenses();
+            calculateDailyTotal();
         });
 
         // Add keyboard navigation
@@ -688,25 +690,6 @@
                 nextDay();
             }
         });
-
-        // Add this function to your existing JavaScript
-        async function initializeExpenses() {
-            const date = dateInput.value;
-            try {
-                const response = await fetch(`/api/expenses?date=${date}`);
-                const data = await response.json();
-                
-                // Set values for each category
-                categories.forEach(category => {
-                    const input = document.getElementById(category);
-                    input.value = data[category] || 0;
-                });
-                
-                calculateDailyTotal();
-            } catch (error) {
-                console.error('Error loading expenses:', error);
-            }
-        }
     </script>
 </body>
 </html>
