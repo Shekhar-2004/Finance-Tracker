@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
-from flask_login import UserMixin, LoginManager, login_required, current_user
+from flask_login import UserMixin, LoginManager, login_required, current_user, login_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -56,7 +56,59 @@ class Expense(db.Model):
 with app.app_context():
     db.create_all()
 
-# Routes
+# Authentication routes
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('index'))
+        
+        return render_template('login.html', error="Invalid username or password")
+    
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        email = request.form.get('email')
+        
+        if User.query.filter_by(username=username).first():
+            return render_template('register.html', error="Username already exists")
+        
+        if User.query.filter_by(email=email).first():
+            return render_template('register.html', error="Email already registered")
+        
+        user = User(username=username, email=email)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        
+        login_user(user)
+        return redirect(url_for('index'))
+    
+    return render_template('register.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+# Main routes
 @app.route('/')
 @login_required
 def index():
@@ -195,4 +247,4 @@ def update_budget():
         return jsonify({'message': str(e)}), 500
 
 if __name__ == '__main__':
-     app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000)
