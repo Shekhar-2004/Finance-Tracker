@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_login import UserMixin, LoginManager, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///finance.db'
@@ -28,6 +29,12 @@ class User(UserMixin, db.Model):
     # Relationships
     budgets = db.relationship('Budget', backref='user', lazy=True)
     expenses = db.relationship('Expense', backref='user', lazy=True)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Budget(db.Model):
     id = db.Column(db.Integer, primary_key=True)
