@@ -1,42 +1,130 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Monthly Summary</title>
+    <title>Monthly Summary - Finance Tracker</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style>
-        /* Include the shared styles from above */
-        /* ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .navbar {
+            background: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            margin-bottom: 2rem;
+        }
+
+        .nav-links {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-links a:hover {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
 
         .summary-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 1.5rem;
             margin-bottom: 2rem;
         }
 
         .stat-card {
             background: white;
-            padding: 1.5rem;
+            padding: 2rem;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
 
         .stat-card .label {
             color: #4a5568;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
         }
 
         .stat-card .value {
-            font-size: 2rem;
+            font-size: 2.5rem;
             font-weight: 600;
             color: #2d3748;
+        }
+
+        .stat-card .trend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .chart-section {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .chart-section {
+                grid-template-columns: 1fr;
+            }
         }
 
         .chart-container {
@@ -44,28 +132,89 @@
             padding: 2rem;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 2rem;
+            height: 400px;
+        }
+
+        .chart-container h2 {
+            font-size: 1.25rem;
+            color: #2d3748;
+            margin-bottom: 1.5rem;
         }
 
         .insights-container {
-            background: #f7fafc;
-            padding: 1.5rem;
+            background: white;
+            padding: 2rem;
             border-radius: 12px;
-            margin-top: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .insights-container h2 {
+            font-size: 1.25rem;
+            color: #2d3748;
+            margin-bottom: 1.5rem;
         }
 
         .insight-item {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 1rem;
             padding: 1rem;
-            background: white;
+            background: #f8fafc;
             border-radius: 8px;
             margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .insight-item:hover {
+            transform: translateX(5px);
+            background: #edf2f7;
         }
 
         .insight-icon {
             color: #4299e1;
+            background: #ebf8ff;
+            padding: 0.5rem;
+            border-radius: 8px;
+        }
+
+        .insight-content {
+            flex: 1;
+        }
+
+        .insight-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 0.25rem;
+        }
+
+        .insight-value {
+            color: #4a5568;
+            font-size: 0.875rem;
+        }
+
+        .category-list {
+            margin-top: 2rem;
+        }
+
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #f8fafc;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .category-name {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .category-amount {
+            font-weight: 500;
+            color: #2d3748;
         }
     </style>
 </head>
@@ -80,110 +229,158 @@
                 <i class="material-icons">calendar_today</i>
                 Calendar
             </a>
-            <a href="/summary">
+            <a href="/summary" class="active">
                 <i class="material-icons">insights</i>
                 Summary
             </a>
         </div>
     </nav>
 
-    <div class="container fade-in">
+    <div class="container">
         <h1>Monthly Financial Summary</h1>
 
         <div class="summary-grid">
             <div class="stat-card">
-                <div class="label">Total Spent</div>
+                <div class="label">Total Spent This Month</div>
                 <div class="value">₹<span id="totalSpent">0.00</span></div>
+                <div class="trend" id="spendingTrend"></div>
             </div>
             <div class="stat-card">
                 <div class="label">Remaining Budget</div>
                 <div class="value">₹<span id="remainingBudget">0.00</span></div>
+                <div class="trend" id="budgetStatus"></div>
             </div>
         </div>
 
-        <div class="chart-container">
-            <canvas id="pieChart"></canvas>
-        </div>
+        <div class="chart-section">
+            <div class="chart-container">
+                <h2>Expense Distribution</h2>
+                <canvas id="pieChart"></canvas>
+            </div>
 
-        <div class="insights-container">
-            <h2>Insights</h2>
-            <div id="insights"></div>
+            <div class="insights-container">
+                <h2>Key Insights</h2>
+                <div id="insights"></div>
+                <div class="category-list" id="categoryList"></div>
+            </div>
         </div>
     </div>
 
     <script>
         async function loadSummary() {
-            const response = await fetch('/api/summary');
-            const data = await response.json();
-            
-            document.getElementById('totalSpent').textContent = data.total_spent.toFixed(2);
-            document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
+            try {
+                const response = await fetch('/api/summary');
+                const data = await response.json();
+                
+                // Update statistics
+                document.getElementById('totalSpent').textContent = data.total_spent.toFixed(2);
+                document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
 
-            const ctx = document.getElementById('pieChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: Object.keys(data.category_totals),
-                    datasets: [{
-                        data: Object.values(data.category_totals),
-                        backgroundColor: [
-                            '#4299E1', // blue
-                            '#48BB78', // green
-                            '#ED8936', // orange
-                            '#9F7AEA', // purple
-                            '#F56565'  // red
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
+                // Update spending trend
+                const spendingTrend = document.getElementById('spendingTrend');
+                spendingTrend.innerHTML = `
+                    <i class="material-icons" style="color: #48BB78;">trending_up</i>
+                    <span>Monthly Progress</span>
+                `;
+
+                // Update budget status
+                const budgetStatus = document.getElementById('budgetStatus');
+                const isWithinBudget = data.remaining_budget > 0;
+                budgetStatus.innerHTML = `
+                    <i class="material-icons" style="color: ${isWithinBudget ? '#48BB78' : '#F56565'};">
+                        ${isWithinBudget ? 'check_circle' : 'warning'}
+                    </i>
+                    <span>${isWithinBudget ? 'Within Budget' : 'Over Budget'}</span>
+                `;
+
+                // Create pie chart
+                const ctx = document.getElementById('pieChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(data.category_totals),
+                        datasets: [{
+                            data: Object.values(data.category_totals),
+                            backgroundColor: [
+                                '#4299E1',
+                                '#48BB78',
+                                '#ED8936',
+                                '#9F7AEA',
+                                '#F56565'
+                            ],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    padding: 20,
+                                    font: {
+                                        family: 'Inter'
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '60%'
                     }
-                }
-            });
+                });
 
-            const insightsDiv = document.getElementById('insights');
-            let insights = '';
-            
-            // Find highest spending category
-            let maxCategory = null, maxAmount = 0;
-            for (const [category, amount] of Object.entries(data.category_totals)) {
-                if (amount > maxAmount) {
-                    maxAmount = amount;
-                    maxCategory = category;
-                }
-            }
+                // Generate insights
+                const insightsDiv = document.getElementById('insights');
+                const categoryList = document.getElementById('categoryList');
+                
+                // Find highest spending category
+                const categories = Object.entries(data.category_totals)
+                    .sort(([,a], [,b]) => b - a);
+                
+                const [topCategory, topAmount] = categories[0];
 
-            if (maxCategory) {
-                insights += `
+                insightsDiv.innerHTML = `
                     <div class="insight-item">
                         <i class="material-icons insight-icon">trending_up</i>
-                        <div>
-                            <strong>Highest Spending Category:</strong>
-                            <br>${maxCategory} (₹${maxAmount.toFixed(2)})
+                        <div class="insight-content">
+                            <div class="insight-title">Highest Expense Category</div>
+                            <div class="insight-value">${topCategory} (₹${topAmount.toFixed(2)})</div>
                         </div>
-                    </div>`;
-            }
-
-            // Add budget status insight
-            const budgetStatus = data.remaining_budget > 0 ? 'positive' : 'negative';
-            insights += `
-                <div class="insight-item">
-                    <i class="material-icons insight-icon">${budgetStatus === 'positive' ? 'check_circle' : 'warning'}</i>
-                    <div>
-                        <strong>Budget Status:</strong>
-                        <br>${budgetStatus === 'positive' ? 'You are within your budget!' : 'You have exceeded your budget.'}
                     </div>
-                </div>`;
+                    <div class="insight-item">
+                        <i class="material-icons insight-icon">${isWithinBudget ? 'savings' : 'account_balance'}</i>
+                        <div class="insight-content">
+                            <div class="insight-title">Budget Utilization</div>
+                            <div class="insight-value">
+                                ${isWithinBudget 
+                                    ? 'You are managing your expenses well!' 
+                                    : 'Consider reviewing your spending habits.'}
+                            </div>
+                        </div>
+                    </div>
+                `;
 
-            insightsDiv.innerHTML = insights;
+                // Generate category list
+                categoryList.innerHTML = `
+                    <h2>Category Breakdown</h2>
+                    ${categories.map(([category, amount]) => `
+                        <div class="category-item">
+                            <div class="category-name">
+                                <i class="material-icons">folder</i>
+                                ${category}
+                            </div>
+                            <div class="category-amount">₹${amount.toFixed(2)}</div>
+                        </div>
+                    `).join('')}
+                `;
+
+            } catch (error) {
+                console.error('Error loading summary:', error);
+            }
         }
         
-        loadSummary();
+        // Load summary when page loads
+        document.addEventListener('DOMContentLoaded', loadSummary);
     </script>
 </body>
 </html>
