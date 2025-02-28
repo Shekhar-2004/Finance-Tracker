@@ -43,10 +43,13 @@ def index():
 def expense():
     categories = ['Auto', 'Online Food', 'College Mess', 'Instamart', 'Miscellaneous']
     
-    # No need to pass today's date as it will be handled by JavaScript
+    # Initialize empty expenses dictionary
+    expenses = {}
+    
     return render_template(
         'expense.html',
-        categories=categories
+        categories=categories,
+        expenses=expenses
     )
 
 @app.route('/add_expense', methods=['POST'])

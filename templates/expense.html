@@ -391,7 +391,7 @@
                 <input type="number" 
                        step="0.01" 
                        id="{{ category }}" 
-                       value="{{ expenses.get(category, 0) }}" 
+                       value="0"
                        oninput="calculateDailyTotal()">
             </div>
             {% endfor %}
@@ -639,6 +639,7 @@
         // Initialize date and load expenses when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initializeDate();
+            initializeExpenses();
         });
 
         // Add keyboard navigation
@@ -649,6 +650,25 @@
                 nextDay();
             }
         });
+
+        // Add this function to your existing JavaScript
+        async function initializeExpenses() {
+            const date = dateInput.value;
+            try {
+                const response = await fetch(`/api/expenses?date=${date}`);
+                const data = await response.json();
+                
+                // Set values for each category
+                categories.forEach(category => {
+                    const input = document.getElementById(category);
+                    input.value = data[category] || 0;
+                });
+                
+                calculateDailyTotal();
+            } catch (error) {
+                console.error('Error loading expenses:', error);
+            }
+        }
     </script>
 </body>
 </html>
