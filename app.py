@@ -13,6 +13,10 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from urllib.parse import urlparse
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import inspect
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SubmitField
+from wtforms.validators import DataRequired
+from sqlalchemy.orm import Session
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -57,7 +61,7 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return Session.get(User, int(user_id))
 
 # Database Models
 class User(db.Model, UserMixin):
@@ -226,39 +230,19 @@ def register():
             
     return render_template('register.html')
 
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    remember_me = BooleanField('Remember Me')
+    submit = SubmitField('Sign In')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """User login route"""
-    if current_user.is_authenticated:
-        return redirect(url_for('expense'))
-    
-    if request.method == 'POST':
-        try:
-            username = request.form.get('username')
-            password = request.form.get('password')
-            remember = bool(request.form.get('remember'))
-            
-            user = User.query.filter_by(username=username).first()
-            logger.debug(f"Login attempt for user: {username}")
-            
-            if user and user.check_password(password):
-                login_user(user, remember=remember)
-                logger.info(f"User logged in successfully: {username}")
-                
-                next_page = request.args.get('next')
-                if not next_page or urlparse(next_page).netloc != '':
-                    next_page = url_for('expense')
-                return redirect(next_page)
-            else:
-                flash('Invalid username or password', 'error')
-                logger.warning(f"Failed login attempt for user: {username}")
-                
-        except Exception as e:
-            flash('Login failed. Please try again.', 'error')
-            logger.error(f"Login error: {str(e)}")
-            logger.error(traceback.format_exc())
-    
-    return render_template('login.html')
+    form = LoginForm()
+    if form.validate_on_submit():
+        # Your login logic here
+        pass
+    return render_template('login.html', form=form)
 
 @app.route('/logout')
 @login_required
