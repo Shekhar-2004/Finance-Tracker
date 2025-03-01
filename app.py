@@ -258,49 +258,44 @@ def logout():
 def budget_setup():
     """Budget setup route"""
     if request.method == 'POST':
+        month = request.form.get('month')
+        budget_amount = request.form.get('budget')
+        
+        app.logger.debug(f"Received month: {month}, budget_amount: {budget_amount}")
+        
+        if not month or not budget_amount:
+            flash('Month and amount are required', 'error')
+            return redirect(url_for('budget_setup'))
+        
         try:
-            month = request.form.get('month')
-            amount = request.form.get('amount')
-            
-            if not month or not amount:
-                raise ValueError("Month and amount are required")
-            
-            try:
-                amount = float(amount)
-                if amount <= 0:
-                    raise ValueError
-            except (ValueError, InvalidOperation):
-                raise ValueError("Amount must be a positive number")
-            
-            existing_budget = Budget.query.filter_by(
-                user_id=current_user.id,
-                month=month
-            ).first()
-            
-            if existing_budget:
-                existing_budget.amount = amount
-                logger.info(f"Updated budget for {month}: {amount}")
-            else:
-                new_budget = Budget(
-                    month=month,
-                    amount=amount,
-                    user_id=current_user.id
-                )
-                db.session.add(new_budget)
-                logger.info(f"Created new budget for {month}: {amount}")
-            
-            db.session.commit()
-            flash('Budget saved successfully!', 'success')
-            return redirect(url_for('expense'))
-            
-        except ValueError as e:
-            flash(str(e), 'error')
-            logger.warning(f"Budget setup validation error: {str(e)}")
-        except Exception as e:
-            flash('Failed to save budget. Please try again.', 'error')
-            logger.error(f"Budget setup error: {str(e)}")
-            logger.error(traceback.format_exc())
-    
+            amount = float(budget_amount)
+            if amount <= 0:
+                raise ValueError
+        except (ValueError, InvalidOperation):
+            flash('Amount must be a positive number', 'error')
+            return redirect(url_for('budget_setup'))
+        
+        existing_budget = Budget.query.filter_by(
+            user_id=current_user.id,
+            month=month
+        ).first()
+        
+        if existing_budget:
+            existing_budget.amount = amount
+            logger.info(f"Updated budget for {month}: {amount}")
+        else:
+            new_budget = Budget(
+                month=month,
+                amount=amount,
+                user_id=current_user.id
+            )
+            db.session.add(new_budget)
+            logger.info(f"Created new budget for {month}: {amount}")
+        
+        db.session.commit()
+        flash('Budget saved successfully!', 'success')
+        return redirect(url_for('expense'))
+        
     return render_template('budget_setup.html')
 
 @app.route('/')
