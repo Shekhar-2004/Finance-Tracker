@@ -8,3 +8,4 @@ itsdangerous>=2.2.0
 SQLAlchemy>=2.0,<3.0
 alembic>=1.12,<2.0
 python-dotenv>=1.0,<2.0
+email_validator>=2.0.0
