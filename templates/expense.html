@@ -384,8 +384,13 @@
                                id="newBudget" 
                                step="0.01" 
                                placeholder="Enter new budget amount"
-                               min="0">
+                               min="0"
+                               required>
                     </div>
+                </div>
+                <div class="budget-input-container">
+                    <label for="budgetMonth">Month</label>
+                    <input type="month" id="budgetMonth" required>
                 </div>
                 <button onclick="updateBudget()">Update Budget</button>
             </div>
@@ -539,9 +544,9 @@
 
         const updateRemainingBudget = debounce(async () => {
             try {
-                const response = await fetch('/api/summary');
-                const data = await response.json();
-                document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
+            const response = await fetch('/api/summary');
+            const data = await response.json();
+            document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
                 document.getElementById('currentBudget').textContent = (data.remaining_budget + data.total_spent).toFixed(2);
             } catch (error) {
                 console.error('Error updating budget:', error);
@@ -583,16 +588,16 @@
 
             try {
                 const response = await fetch('/add_expense', {
-                    method: 'POST',
+                method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
                         'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                     },
-                    body: JSON.stringify(data)
-                });
+                body: JSON.stringify(data)
+            });
 
                 if (response.ok) {
-                    await updateRemainingBudget();
+            await updateRemainingBudget();
                     // Show success message
                     const successMessage = document.createElement('div');
                     successMessage.className = 'success-message';
@@ -628,10 +633,11 @@
         }
 
         async function updateBudget() {
+            const month = document.getElementById('budgetMonth').value;
             const newBudget = document.getElementById('newBudget').value;
             
-            if (!newBudget || parseFloat(newBudget) <= 0) {
-                alert('Please enter a valid budget amount');
+            if (!newBudget || parseFloat(newBudget) <= 0 || !month) {
+                alert('Please enter a valid budget amount and select a month');
                 return;
             }
 
@@ -643,6 +649,7 @@
                         'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({
+                        month: month,
                         budget: parseFloat(newBudget)
                     })
                 });
@@ -652,8 +659,6 @@
                     document.getElementById('currentBudget').textContent = parseFloat(newBudget).toFixed(2);
                     await updateRemainingBudget();
                     closeBudgetModal();
-                    
-                    // Show success message
                     alert('Budget updated successfully!');
                 } else {
                     const error = await response.json();

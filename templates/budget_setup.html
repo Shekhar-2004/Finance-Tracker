@@ -274,7 +274,7 @@
                 <i class="material-icons">arrow_forward</i>
                 {% if budget %}Update Budget{% else %}Get Started{% endif %}
             </button>
-        </form>
+    </form>
 
         <div class="features-grid">
             <div class="feature-item">
@@ -338,6 +338,9 @@
                 console.error('Animation error:', error);
             }
         });
+
+        const categories = JSON.parse('{{ categories|tojson|safe }}' || '[]');
+        console.log(categories);  // For debugging in the browser console
     </script>
 </body>
 </html>

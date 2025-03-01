@@ -38,7 +38,7 @@ csrf = CSRFProtect(app)
 
 # Update the app configuration
 app.config.update(
-    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///finance.db'),
+    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///finance.db').replace("postgres://", "postgresql://", 1),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
     SESSION_COOKIE_SECURE=False,  # Changed to False for development
@@ -106,7 +106,7 @@ class Budget(db.Model):
     __tablename__ = 'budget'
     
     id = db.Column(db.Integer, primary_key=True)
-    month = db.Column(db.String(7), nullable=False)
+    month = db.Column(db.String(7), nullable=False)  # Store as YYYY-MM
     amount = db.Column(db.Float, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -295,7 +295,7 @@ def budget_setup():
         db.session.commit()
         flash('Budget saved successfully!', 'success')
         return redirect(url_for('expense'))
-        
+
     return render_template('budget_setup.html')
 
 @app.route('/')
@@ -303,7 +303,19 @@ def budget_setup():
 @login_required
 def expense():
     """Main expense tracking page"""
-    return render_template('expense.html')
+    categories = get_categories()  # Replace with your actual function to fetch categories
+
+    if categories is None:
+        categories = []
+
+    app.logger.debug(f"Categories: {categories}")
+
+    return render_template('expense.html', categories=categories)
+
+def get_categories():
+    """Mock function to return categories"""
+    # Replace this with actual logic to fetch categories from the database
+    return ["Food", "Transport", "Utilities", "Entertainment"]
 
 @app.route('/api/expenses', methods=['POST'])
 @login_required
@@ -387,7 +399,7 @@ def get_expenses():
         
         logger.debug(f"Retrieved expenses for period {start_date} to {end_date}")
         return jsonify(expense_data)
-        
+
     except Exception as e:
         logger.error(f"Error retrieving expenses: {str(e)}")
         logger.error(traceback.format_exc())
@@ -431,16 +443,27 @@ def calendar():
     """Calendar view of expenses"""
     return render_template('calendar.html')
 
+@app.route('/api/update_budget', methods=['POST'])
+def update_budget():
+    data = request.get_json()
+    try:
+        datetime.strptime(data['month'], '%Y-%m')  # Validate format
+    except ValueError:
+        return jsonify({"error": "Use YYYY-MM format"}), 400
+
+    # Add logic to update the budget in the database
+    # ...
+
+@app.route('/api/summary')
+def get_summary():
+    month = request.args.get('month')
+    if not month:
+        return jsonify({"error": "Month parameter is required"}), 400
+
+    expenses = Expense.query.filter(Expense.date.like(f'{month}%')).all()
+    # Process expenses to generate summary
+    # ...
+
 if __name__ == '__main__':
-    with app.app_context():
-        # Create all database tables
-        db.create_all()
-        
-        # Verify database setup
-        if verify_database():
-            logger.info("Database verification successful")
-        else:
-            logger.error("Database verification failed")
-        
-        # Start the application
-        app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
