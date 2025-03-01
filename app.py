@@ -3,14 +3,21 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_login import UserMixin, LoginManager, login_required, current_user, login_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
+import logging
+import os
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize Flask app with configurations
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///finance.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///finance.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'your-secret-key-here'
-db = SQLAlchemy(app)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
-# Initialize Flask-Login
+# Initialize extensions
+db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -26,9 +33,8 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     
-    # Relationships
-    budgets = db.relationship('Budget', backref='user', lazy=True)
-    expenses = db.relationship('Expense', backref='user', lazy=True)
+    budgets = db.relationship('Budget', backref='user', lazy=True, cascade="all, delete-orphan")
+    expenses = db.relationship('Expense', backref='user', lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -42,7 +48,6 @@ class Budget(db.Model):
     amount = db.Column(db.Float)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
-    # Add unique constraint for user+month combination
     __table_args__ = (db.UniqueConstraint('user_id', 'month'),)
 
 class Expense(db.Model):
@@ -53,10 +58,63 @@ class Expense(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 # Create tables
-with app.app_context():
-    db.create_all()
+def init_db():
+    with app.app_context():
+        db.create_all()
+
+# Initialize database
+init_db()
 
 # Authentication routes
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username')
+            email = request.form.get('email')
+            password = request.form.get('password')
+            confirm_password = request.form.get('confirm_password')
+
+            if not all([username, email, password, confirm_password]):
+                flash('All fields are required')
+                return render_template('register.html', error='All fields are required')
+
+            if password != confirm_password:
+                flash('Passwords do not match')
+                return render_template('register.html', error='Passwords do not match')
+
+            if len(password) < 6:
+                flash('Password must be at least 6 characters long')
+                return render_template('register.html', error='Password must be at least 6 characters long')
+
+            if User.query.filter_by(username=username).first():
+                flash('Username already exists')
+                return render_template('register.html', error='Username already exists')
+
+            if User.query.filter_by(email=email).first():
+                flash('Email already registered')
+                return render_template('register.html', error='Email already registered')
+
+            new_user = User(username=username, email=email)
+            new_user.set_password(password)
+
+            db.session.add(new_user)
+            db.session.commit()
+
+            login_user(new_user)
+            flash('Registration successful!')
+            return redirect(url_for('index'))
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Registration error: {str(e)}", exc_info=True)
+            return render_template('register.html', error='An error occurred during registration. Please try again.')
+
+    return render_template('register.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -75,62 +133,6 @@ def login():
         return render_template('login.html', error="Invalid username or password")
     
     return render_template('login.html')
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        try:
-            # Get form data
-            username = request.form.get('username')
-            email = request.form.get('email')
-            password = request.form.get('password')
-            confirm_password = request.form.get('confirm_password')
-
-            # Validate form data
-            if not username or not email or not password:
-                flash('All fields are required')
-                return render_template('register.html', error='All fields are required')
-
-            if password != confirm_password:
-                flash('Passwords do not match')
-                return render_template('register.html', error='Passwords do not match')
-
-            # Check if username or email already exists
-            existing_user = User.query.filter(
-                (User.username == username) | (User.email == email)
-            ).first()
-            
-            if existing_user:
-                if existing_user.username == username:
-                    return render_template('register.html', error='Username already exists')
-                else:
-                    return render_template('register.html', error='Email already registered')
-
-            # Create new user
-            new_user = User(
-                username=username,
-                email=email,
-                password_hash=generate_password_hash(password)
-            )
-
-            # Add to database
-            db.session.add(new_user)
-            db.session.commit()
-
-            # Log in the new user
-            login_user(new_user)
-            
-            # Redirect to home page
-            return redirect(url_for('index'))
-
-        except Exception as e:
-            # Roll back the session in case of error
-            db.session.rollback()
-            print(f"Registration error: {str(e)}")  # For debugging
-            return render_template('register.html', error='An error occurred during registration. Please try again.')
-
-    # GET request - show registration form
-    return render_template('register.html')
 
 @app.route('/logout')
 @login_required
@@ -275,6 +277,3 @@ def update_budget():
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
