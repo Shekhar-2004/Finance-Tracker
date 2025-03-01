@@ -10,6 +10,8 @@ import traceback
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from urllib.parse import urlparse
+from flask_wtf.csrf import CSRFProtect
+from decimal import Decimal, InvalidOperation
 
 # Enhanced logging configuration
 logging.basicConfig(
@@ -25,21 +27,21 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app)  # Add support for proxy headers
 
-# Database configuration with error handling
-def get_database_url():
-    db_url = os.environ.get('DATABASE_URL')
-    if db_url and db_url.startswith('postgres://'):
-        db_url = db_url.replace('postgres://', 'postgresql://', 1)
-    return db_url or 'sqlite:///finance.db'
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
 
+# Add these configurations
 app.config.update(
-    SQLALCHEMY_DATABASE_URI=get_database_url(),
+    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///finance.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(days=7)
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+    WTF_CSRF_ENABLED=True,
+    WTF_CSRF_TIME_LIMIT=3600,  # 1 hour
+    WTF_CSRF_SSL_STRICT=True
 )
 
 # Initialize extensions with error handling
@@ -495,47 +497,77 @@ def update_budget():
 def error():
     return render_template('error.html')
 
+@app.route('/', methods=['GET', 'POST'])
 @app.route('/budget_setup', methods=['GET', 'POST'])
 @login_required
 def budget_setup():
     """Handle budget setup for new users"""
     try:
+        logger.debug(f"Budget setup route accessed - Method: {request.method}")
+        debug_request(request)
+        
         if request.method == 'POST':
-            budget_amount = float(request.form.get('budget'))
-            if budget_amount <= 0:
-                flash('Please enter a valid budget amount greater than 0', 'error')
+            logger.debug("Processing budget setup POST request")
+            
+            try:
+                budget_amount = request.form.get('budget')
+                logger.debug(f"Received budget amount: {budget_amount}")
+                
+                # Validate budget amount
+                budget_amount = validate_budget(budget_amount)
+                
+                # Get current month in YYYY-MM format
+                current_month = datetime.now().strftime('%Y-%m')
+                
+                # Check if budget already exists for this month
+                existing_budget = Budget.query.filter_by(
+                    user_id=current_user.id,
+                    month=current_month
+                ).first()
+
+                try:
+                    if existing_budget:
+                        logger.debug(f"Updating existing budget for {current_month}")
+                        existing_budget.amount = budget_amount
+                    else:
+                        logger.debug(f"Creating new budget for {current_month}")
+                        new_budget = Budget(
+                            month=current_month,
+                            amount=budget_amount,
+                            user_id=current_user.id
+                        )
+                        db.session.add(new_budget)
+
+                    db.session.commit()
+                    logger.info(f"Budget successfully set/updated for user {current_user.id}")
+                    flash('Budget set successfully!', 'success')
+                    return redirect(url_for('expense'))
+                
+                except SQLAlchemyError as db_error:
+                    logger.error(f"Database error: {str(db_error)}")
+                    db.session.rollback()
+                    flash('Database error occurred. Please try again.', 'error')
+                    return redirect(url_for('budget_setup'))
+
+            except ValueError as ve:
+                logger.warning(f"Validation error: {str(ve)}")
+                flash(str(ve), 'error')
                 return redirect(url_for('budget_setup'))
 
-            # Get current month in YYYY-MM format
-            current_month = datetime.now().strftime('%Y-%m')
-            
-            # Check if budget already exists for this month
-            existing_budget = Budget.query.filter_by(
-                user_id=current_user.id,
-                month=current_month
-            ).first()
-
-            if existing_budget:
-                existing_budget.amount = budget_amount
-            else:
-                new_budget = Budget(
-                    month=current_month,
-                    amount=budget_amount,
-                    user_id=current_user.id
-                )
-                db.session.add(new_budget)
-
-            db.session.commit()
-            flash('Budget set successfully!', 'success')
-            return redirect(url_for('expense'))
-
         # GET request - show the budget setup form
-        return render_template('budget_setup.html')
+        logger.debug("Rendering budget setup form")
+        current_month = datetime.now().strftime('%Y-%m')
+        current_budget = Budget.query.filter_by(
+            user_id=current_user.id,
+            month=current_month
+        ).first()
+        
+        return render_template('budget_setup.html', budget=current_budget)
 
     except Exception as e:
-        logger.error(f"Error in budget_setup: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error in budget_setup: {str(e)}", exc_info=True)
         db.session.rollback()
-        flash('An error occurred while setting up your budget. Please try again.', 'error')
+        flash('An unexpected error occurred. Please try again.', 'error')
         return redirect(url_for('budget_setup'))
 
 # Initialize the application

@@ -243,6 +243,7 @@
         </p>
         
         <form method="POST" action="{{ url_for('budget_setup') }}" class="budget-form">
+            {{ form.csrf_token if form }}
             <div class="budget-input-container">
                 <label for="budget">Monthly Budget Amount</label>
                 <div class="budget-input">
@@ -254,12 +255,13 @@
                            required 
                            placeholder="Enter your monthly budget"
                            min="0"
-                           autocomplete="off">
+                           autocomplete="off"
+                           {% if budget %}value="{{ budget.amount }}"{% endif %}>
                 </div>
             </div>
-            <button type="submit">
+            <button type="submit" id="submitButton">
                 <i class="material-icons">arrow_forward</i>
-                Get Started
+                {% if budget %}Update Budget{% else %}Get Started{% endif %}
             </button>
         </form>
 
@@ -283,22 +285,42 @@
     </div>
 
     <script>
-        // Add input validation
+        // Enhanced form validation
         document.querySelector('form').addEventListener('submit', function(e) {
-            const budget = document.getElementById('budget').value;
-            if (budget <= 0) {
+            const budgetInput = document.getElementById('budget');
+            const budget = parseFloat(budgetInput.value);
+            
+            if (isNaN(budget) || budget <= 0) {
                 e.preventDefault();
                 alert('Please enter a valid budget amount greater than 0');
+                budgetInput.focus();
+                return false;
             }
         });
 
-        // Add animation on input focus
+        // Add animation on input focus with error handling
         const input = document.getElementById('budget');
         input.addEventListener('focus', function() {
-            this.parentElement.style.transform = 'scale(1.02)';
+            try {
+                this.parentElement.style.transform = 'scale(1.02)';
+            } catch (error) {
+                console.error('Animation error:', error);
+            }
         });
+        
         input.addEventListener('blur', function() {
-            this.parentElement.style.transform = 'scale(1)';
+            try {
+                this.parentElement.style.transform = 'scale(1)';
+            } catch (error) {
+                console.error('Animation error:', error);
+            }
+        });
+
+        // Add input validation for non-negative numbers
+        input.addEventListener('input', function() {
+            if (this.value < 0) {
+                this.value = 0;
+            }
         });
     </script>
 </body>
