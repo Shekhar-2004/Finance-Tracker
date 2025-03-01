@@ -8,6 +8,8 @@ import os
 import sys
 import traceback
 from werkzeug.middleware.proxy_fix import ProxyFix
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from werkzeug.urls import url_parse
 
 # Enhanced logging configuration
 logging.basicConfig(
@@ -55,36 +57,135 @@ except Exception as e:
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Database Models
+# Enhanced debug helpers
+def debug_request(request):
+    """Debug helper to log request details"""
+    logger.debug("=== Request Details ===")
+    logger.debug(f"Method: {request.method}")
+    logger.debug(f"Form Data: {dict(request.form)}")  # Convert to dict for better logging
+    logger.debug(f"URL: {request.url}")
+    logger.debug(f"Headers: {dict(request.headers)}")
+    logger.debug(f"Cookies: {dict(request.cookies)}")
+
+def log_user_state():
+    """Debug helper to log current user state"""
+    logger.debug("=== User State ===")
+    logger.debug(f"Is authenticated: {current_user.is_authenticated}")
+    if current_user.is_authenticated:
+        logger.debug(f"Current user: {current_user.username}")
+
+# Enhanced database initialization
+def init_db():
+    """Initialize database with proper error handling"""
+    try:
+        with app.app_context():
+            # Check if database exists
+            inspector = db.inspect(db.engine)
+            existing_tables = inspector.get_table_names()
+            logger.info(f"Existing tables: {existing_tables}")
+            
+            # Create tables if they don't exist
+            db.create_all()
+            logger.info("Database initialization completed successfully")
+            
+            # Verify all required tables are created
+            required_tables = {'user', 'budget', 'expense'}
+            actual_tables = set(inspector.get_table_names())
+            missing_tables = required_tables - actual_tables
+            
+            if missing_tables:
+                logger.error(f"Missing tables: {missing_tables}")
+                raise Exception(f"Failed to create tables: {missing_tables}")
+            
+            logger.info("All required tables are present")
+            
+    except Exception as e:
+        logger.error(f"Database initialization failed: {str(e)}", exc_info=True)
+        raise
+
+# Database Models (reorder the models)
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Define relationships after both models are defined
     budgets = db.relationship('Budget', backref='user', lazy=True, cascade="all, delete-orphan")
     expenses = db.relationship('Expense', backref='user', lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):
+        if not password or len(password) < 6:
+            raise ValueError("Password must be at least 6 characters long")
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        if not password:
+            return False
         return check_password_hash(self.password_hash, password)
 
+    @staticmethod
+    def validate_username(username):
+        if not username or len(username) < 3:
+            raise ValueError("Username must be at least 3 characters long")
+        if not username.isalnum() and '_' not in username:
+            raise ValueError("Username can only contain letters, numbers, and underscores")
+        return username.strip()
+
+    @staticmethod
+    def validate_email(email):
+        if not email or '@' not in email or '.' not in email:
+            raise ValueError("Please enter a valid email address")
+        return email.strip().lower()
+
 class Budget(db.Model):
+    """Budget model for storing monthly budgets"""
     id = db.Column(db.Integer, primary_key=True)
-    month = db.Column(db.String(7))
-    amount = db.Column(db.Float)
+    month = db.Column(db.String(7), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    __table_args__ = (db.UniqueConstraint('user_id', 'month'),)
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'month', name='unique_user_month'),
+    )
+
+    def __repr__(self):
+        return f'<Budget {self.month}: {self.amount}>'
 
 class Expense(db.Model):
+    """Expense model for storing daily expenses"""
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date)
-    category = db.Column(db.String(50))
-    amount = db.Column(db.Float)
+    date = db.Column(db.Date, nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Expense {self.date} {self.category}: {self.amount}>'
+
+# Add model validation functions
+def validate_budget(amount):
+    """Validate budget amount"""
+    try:
+        amount = float(amount)
+        if amount <= 0:
+            raise ValueError("Budget amount must be greater than 0")
+        return amount
+    except (TypeError, ValueError):
+        raise ValueError("Invalid budget amount")
+
+def validate_expense(amount):
+    """Validate expense amount"""
+    try:
+        amount = float(amount)
+        if amount < 0:
+            raise ValueError("Expense amount cannot be negative")
+        return amount
+    except (TypeError, ValueError):
+        raise ValueError("Invalid expense amount")
 
 # Error handlers
 @app.errorhandler(404)
@@ -94,82 +195,163 @@ def not_found_error(error):
 
 @app.errorhandler(500)
 def internal_error(error):
+    logger.error(f"500 error: {error}", exc_info=True)
     db.session.rollback()
-    logger.error(f"500 error: {error}\n{traceback.format_exc()}")
     return render_template('error.html', error="Internal server error"), 500
 
-# Modified register route with enhanced error handling
+# Enhanced registration route
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    logger.debug("Register route accessed")
-    
-    if current_user.is_authenticated:
-        logger.debug("Authenticated user attempting to access register page")
-        return redirect(url_for('index'))
+    try:
+        logger.debug("=== Starting Registration Process ===")
+        debug_request(request)
+        log_user_state()
 
-    if request.method == 'POST':
-        logger.debug(f"Registration attempt with data: {request.form}")
-        try:
-            username = request.form.get('username')
-            email = request.form.get('email')
-            password = request.form.get('password')
-            confirm_password = request.form.get('confirm_password')
+        if current_user.is_authenticated:
+            logger.debug("Authenticated user attempting to register - redirecting to index")
+            return redirect(url_for('index'))
 
-            # Validate input
-            if not all([username, email, password, confirm_password]):
-                logger.warning("Incomplete registration form submitted")
-                return render_template('register.html', error='All fields are required')
-
-            if password != confirm_password:
-                logger.warning("Password mismatch in registration")
-                return render_template('register.html', error='Passwords do not match')
-
-            # Create new user with error handling
+        if request.method == 'POST':
+            logger.debug("Processing registration POST request")
+            
             try:
+                # Get and validate form data
+                username = User.validate_username(request.form.get('username', ''))
+                email = User.validate_email(request.form.get('email', ''))
+                password = request.form.get('password', '')
+                confirm_password = request.form.get('confirm_password', '')
+
+                logger.debug(f"Validated username: {username}, email: {email}")
+
+                # Check password match and length
+                if password != confirm_password:
+                    raise ValueError("Passwords do not match")
+                
+                if len(password) < 6:
+                    raise ValueError("Password must be at least 6 characters long")
+
+                # Check existing user
+                if User.query.filter_by(username=username).first():
+                    raise ValueError("Username already exists")
+                
+                if User.query.filter_by(email=email).first():
+                    raise ValueError("Email already registered")
+
+                # Create new user
                 new_user = User(username=username, email=email)
                 new_user.set_password(password)
+                
+                logger.debug("Adding new user to database")
                 db.session.add(new_user)
                 db.session.commit()
-                logger.info(f"Successfully created new user: {username}")
-                
+                logger.info(f"Successfully created user: {username}")
+
+                # Log in the new user
                 login_user(new_user)
+                logger.debug(f"Logged in new user: {username}")
+                
+                flash('Registration successful! Welcome to Finance Tracker.', 'success')
                 return redirect(url_for('index'))
-            
-            except Exception as e:
+
+            except ValueError as ve:
+                logger.warning(f"Validation error during registration: {str(ve)}")
+                return render_template('register.html', error=str(ve))
+                
+            except IntegrityError as ie:
                 db.session.rollback()
-                logger.error(f"Database error during user creation: {str(e)}\n{traceback.format_exc()}")
-                return render_template('register.html', error='Database error occurred. Please try again.')
+                logger.error(f"Database integrity error: {str(ie)}")
+                return render_template('register.html', 
+                    error="A user with that username or email already exists.")
+                
+            except SQLAlchemyError as se:
+                db.session.rollback()
+                logger.error(f"Database error: {str(se)}")
+                return render_template('register.html', 
+                    error="Database error occurred. Please try again.")
 
-        except Exception as e:
-            logger.error(f"Unexpected error in registration: {str(e)}\n{traceback.format_exc()}")
-            return render_template('register.html', error='An unexpected error occurred. Please try again.')
+        return render_template('register.html')
 
-    return render_template('register.html')
+    except Exception as e:
+        logger.error("Unexpected error in registration route", exc_info=True)
+        return render_template('error.html', 
+            error="An unexpected error occurred. Please try again later.")
 
+# Enhanced login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-        
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
-        
-        return render_template('login.html', error="Invalid username or password")
-    
-    return render_template('login.html')
+    try:
+        logger.debug("=== Starting Login Process ===")
+        debug_request(request)
+        log_user_state()
 
+        if current_user.is_authenticated:
+            logger.debug("Authenticated user attempting to login - redirecting to index")
+            return redirect(url_for('index'))
+
+        if request.method == 'POST':
+            logger.debug("Processing login POST request")
+            
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '')
+
+            logger.debug(f"Login attempt for username: {username}")
+
+            if not username or not password:
+                logger.warning("Missing username or password")
+                return render_template('login.html', error="Please enter both username and password")
+
+            try:
+                user = User.query.filter_by(username=username).first()
+                
+                if user is None:
+                    logger.warning(f"No user found with username: {username}")
+                    return render_template('login.html', error="Invalid username or password")
+
+                if not user.check_password(password):
+                    logger.warning(f"Invalid password for user: {username}")
+                    return render_template('login.html', error="Invalid username or password")
+
+                login_user(user)
+                logger.info(f"Successfully logged in user: {username}")
+
+                # Handle next page
+                next_page = request.args.get('next')
+                if not next_page or url_parse(next_page).netloc != '':
+                    next_page = url_for('index')
+                
+                flash('Login successful!', 'success')
+                return redirect(next_page)
+
+            except SQLAlchemyError as se:
+                logger.error(f"Database error during login: {str(se)}")
+                return render_template('login.html', 
+                    error="Database error occurred. Please try again.")
+
+        return render_template('login.html')
+
+    except Exception as e:
+        logger.error("Unexpected error in login route", exc_info=True)
+        return render_template('error.html', 
+            error="An unexpected error occurred. Please try again later.")
+
+# Enhanced logout route
 @app.route('/logout')
 @login_required
 def logout():
-    logout_user()
-    return redirect(url_for('login'))
+    try:
+        logger.debug("=== Processing Logout ===")
+        log_user_state()
+        
+        username = current_user.username
+        logout_user()
+        logger.info(f"Successfully logged out user: {username}")
+        
+        flash('You have been logged out successfully.', 'success')
+        return redirect(url_for('login'))
+    
+    except Exception as e:
+        logger.error("Error during logout", exc_info=True)
+        return redirect(url_for('login'))
 
 # Main routes
 @app.route('/')
@@ -314,21 +496,13 @@ def update_budget():
 def error():
     return render_template('error.html')
 
-# Database initialization with error handling
-def init_db():
-    try:
-        with app.app_context():
-            db.create_all()
-            logger.info("Successfully initialized database tables")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {str(e)}\n{traceback.format_exc()}")
-        raise
+# Initialize the application
+init_db()
 
 # Application startup
 if __name__ == '__main__':
     try:
         port = int(os.environ.get('PORT', 10000))
-        init_db()
         app.run(host='0.0.0.0', port=port)
     except Exception as e:
         logger.error(f"Failed to start application: {str(e)}\n{traceback.format_exc()}")
