@@ -84,21 +84,40 @@ def register():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
         email = request.form.get('email')
         
+        # Validate input
+        if not username or not password or not email:
+            return render_template('register.html', error="All fields are required")
+        
+        if password != confirm_password:
+            return render_template('register.html', error="Passwords do not match")
+            
+        if len(password) < 6:
+            return render_template('register.html', error="Password must be at least 6 characters long")
+            
+        # Check if username or email already exists
         if User.query.filter_by(username=username).first():
             return render_template('register.html', error="Username already exists")
         
         if User.query.filter_by(email=email).first():
             return render_template('register.html', error="Email already registered")
         
-        user = User(username=username, email=email)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        
-        login_user(user)
-        return redirect(url_for('index'))
+        try:
+            # Create new user
+            user = User(username=username, email=email)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            
+            # Log the user in
+            login_user(user)
+            return redirect(url_for('index'))
+            
+        except Exception as e:
+            db.session.rollback()
+            return render_template('register.html', error="An error occurred. Please try again.")
     
     return render_template('register.html')
 
