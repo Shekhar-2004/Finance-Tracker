@@ -244,6 +244,17 @@
         
         <form method="POST" action="{{ url_for('budget_setup') }}" class="budget-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="budget-input-container">
+                <label for="month">Month</label>
+                <input type="month" 
+                       id="month"
+                       name="month" 
+                       required 
+                       placeholder="Select month"
+                       autocomplete="off">
+            </div>
+
             <div class="budget-input-container">
                 <label for="budget">Monthly Budget Amount</label>
                 <div class="budget-input">
@@ -259,6 +270,7 @@
                            {% if budget %}value="{{ '%.2f'|format(budget.amount) }}"{% endif %}>
                 </div>
             </div>
+            
             <button type="submit" id="submitButton">
                 <i class="material-icons">arrow_forward</i>
                 {% if budget %}Update Budget{% else %}Get Started{% endif %}

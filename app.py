@@ -13,9 +13,6 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from urllib.parse import urlparse
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import inspect
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, BooleanField, SubmitField
-from wtforms.validators import DataRequired, Email, Length
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -131,12 +128,6 @@ class Expense(db.Model):
     def __repr__(self):
         return f'<Expense {self.date} {self.category}: {self.amount}>'
 
-class LoginForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired()])
-    password = PasswordField('Password', validators=[DataRequired()])
-    remember_me = BooleanField('Remember Me')
-    submit = SubmitField('Sign In')
-
 def verify_database():
     """Verify database integrity and connectivity"""
     try:
@@ -144,20 +135,6 @@ def verify_database():
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
         app.logger.info(f"Database tables found: {tables}")
-        
-        # Verify table structure
-        expected_tables = {'user', 'budget', 'expense'}
-        if not all(table in tables for table in expected_tables):
-            app.logger.warning("Missing required tables. Recreating database schema...")
-            db.drop_all()
-            db.create_all()
-        
-        # Clean up any existing test users
-        test_user = User.query.filter_by(username="test_verify_db").first()
-        if test_user:
-            db.session.delete(test_user)
-            db.session.commit()
-            app.logger.info("Cleaned up existing test user")
         
         # Count users
         user_count = User.query.count()
@@ -171,27 +148,14 @@ def verify_database():
         test_user.set_password("test123")
         db.session.add(test_user)
         db.session.commit()
-        
-        # Test relationships
-        test_budget = Budget(
-            month="2025-03",
-            amount=1000.0,
-            user_id=test_user.id
-        )
-        db.session.add(test_budget)
-        db.session.commit()
-        
-        # Clean up test data
-        db.session.delete(test_budget)
         db.session.delete(test_user)
         db.session.commit()
+        app.logger.info("Database write test successful")
         
-        app.logger.info("Database verification successful")
         return True
     except Exception as e:
         app.logger.error(f"Database verification failed: {str(e)}")
         app.logger.error(traceback.format_exc())
-        db.session.rollback()
         return False
 
 @app.before_request
@@ -268,13 +232,18 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for('expense'))
     
-    form = LoginForm()
-    if form.validate_on_submit():
+    if request.method == 'POST':
         try:
-            user = User.query.filter_by(username=form.username.data).first()
-            if user and user.check_password(form.password.data):
-                login_user(user, remember=form.remember_me.data)
-                app.logger.info(f"User logged in successfully: {user.username}")
+            username = request.form.get('username')
+            password = request.form.get('password')
+            remember = bool(request.form.get('remember'))
+            
+            user = User.query.filter_by(username=username).first()
+            logger.debug(f"Login attempt for user: {username}")
+            
+            if user and user.check_password(password):
+                login_user(user, remember=remember)
+                logger.info(f"User logged in successfully: {username}")
                 
                 next_page = request.args.get('next')
                 if not next_page or urlparse(next_page).netloc != '':
@@ -282,13 +251,14 @@ def login():
                 return redirect(next_page)
             else:
                 flash('Invalid username or password', 'error')
-                app.logger.warning(f"Failed login attempt for user: {form.username.data}")
+                logger.warning(f"Failed login attempt for user: {username}")
+                
         except Exception as e:
             flash('Login failed. Please try again.', 'error')
-            app.logger.error(f"Login error: {str(e)}")
-            app.logger.error(traceback.format_exc())
+            logger.error(f"Login error: {str(e)}")
+            logger.error(traceback.format_exc())
     
-    return render_template('login.html', form=form)
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required
@@ -484,21 +454,14 @@ def calendar():
 
 if __name__ == '__main__':
     with app.app_context():
-        try:
-            # Drop all tables and recreate them
-            db.drop_all()
-            db.create_all()
-            app.logger.info("Database tables created successfully")
-            
-            # Verify database setup
-            if verify_database():
-                app.logger.info("Database verification successful")
-            else:
-                app.logger.error("Database verification failed")
-            
-        except Exception as e:
-            app.logger.error(f"Database initialization failed: {str(e)}")
-            app.logger.error(traceback.format_exc())
+        # Create all database tables
+        db.create_all()
+        
+        # Verify database setup
+        if verify_database():
+            logger.info("Database verification successful")
+        else:
+            logger.error("Database verification failed")
         
         # Start the application
         app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
