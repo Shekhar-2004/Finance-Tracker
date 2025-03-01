@@ -240,11 +240,23 @@
             document.getElementById('expenseModal').style.display = 'none';
         }
 
+        // Function to format date consistently
+        function formatDate(date) {
+            // Ensure consistent date format YYYY-MM-DD regardless of browser timezone
+            const d = new Date(date);
+            return d.getFullYear() + '-' + 
+                   String(d.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(d.getDate()).padStart(2, '0');
+        }
+
         function showExpenseModal(date, expenses) {
             const modal = document.getElementById('expenseModal');
             const overlay = document.getElementById('modalOverlay');
             const modalDate = document.getElementById('modalDate');
             const modalContent = document.getElementById('modalContent');
+            
+            // Format date consistently for display
+            const formattedDate = formatDate(date);
             
             modalDate.textContent = new Date(date).toLocaleDateString('en-US', {
                 weekday: 'long',
@@ -258,7 +270,7 @@
             let total = 0;
             
             if (Array.isArray(expenses)) {
-                // Group expenses by category
+                // Group expenses by category (from calendar_events API)
                 expenses.forEach(expense => {
                     if (expense.category) {
                         // Make sure we're working with numbers
@@ -274,13 +286,24 @@
                     }
                 });
             } else {
-                // Object format from expenses API
-                expenseData = expenses;
-                for (const amount of Object.values(expenseData)) {
-                    const numAmount = parseFloat(amount);
-                    if (!isNaN(numAmount)) {
-                        total += numAmount;
+                // Object format from expenses API - this is a nested structure
+                // The API returns: { "YYYY-MM-DD": { "category1": amount1, "category2": amount2 } }
+                
+                // Check if the date exists in the response
+                if (expenses[formattedDate]) {
+                    // Use the categories and amounts for this date
+                    expenseData = expenses[formattedDate];
+                    
+                    // Calculate total from the expense data
+                    for (const amount of Object.values(expenseData)) {
+                        const numAmount = parseFloat(amount);
+                        if (!isNaN(numAmount)) {
+                            total += numAmount;
+                        }
                     }
+                } else {
+                    // No expenses for this date
+                    expenseData = {};
                 }
             }
             
@@ -319,7 +342,7 @@
             
             // Add a link to add/edit expenses for this date
             content += `<div style="text-align: center; margin-top: 1rem;">
-                <a href="/expense?date=${date}" style="display: inline-block; padding: 0.5rem 1rem; background: #4299e1; color: white; text-decoration: none; border-radius: 6px;">
+                <a href="/expense?date=${formattedDate}" class="expense-link" data-date="${formattedDate}" style="display: inline-block; padding: 0.5rem 1rem; background: #4299e1; color: white; text-decoration: none; border-radius: 6px;">
                     ${hasExpenses ? 'Edit Expenses' : 'Add Expenses'}
                 </a>
             </div>`;
@@ -327,14 +350,24 @@
             modalContent.innerHTML = content;
             overlay.style.display = 'block';
             modal.style.display = 'block';
+            
+            // Add event listener to the expense link to refresh calendar after returning
+            document.querySelectorAll('.expense-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Store the date in sessionStorage to know we need to refresh
+                    sessionStorage.setItem('expense_edited_date', this.getAttribute('data-date'));
+                });
+            });
         }
 
         // Close modal when clicking outside
         document.getElementById('modalOverlay').addEventListener('click', closeModal);
 
+        let calendar; // Make calendar globally accessible
+
         document.addEventListener('DOMContentLoaded', function() {
             const calendarEl = document.getElementById('calendar');
-            const calendar = new FullCalendar.Calendar(calendarEl, {
+            calendar = new FullCalendar.Calendar(calendarEl, {
                 initialView: 'dayGridMonth',
                 headerToolbar: {
                     left: 'prev,next today',
@@ -349,7 +382,7 @@
                     fetch(`/api/calendar_events?start=${startDate}&end=${endDate}`)
                         .then(response => {
                             if (!response.ok) {
-                                throw new Error('Network response was not ok');
+                                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
                             }
                             return response.json();
                         })
@@ -359,6 +392,13 @@
                         })
                         .catch(error => {
                             console.error('Error fetching events:', error);
+                            // Show a more user-friendly error
+                            const errorMessage = document.createElement('div');
+                            errorMessage.style.textAlign = 'center';
+                            errorMessage.style.padding = '2rem';
+                            errorMessage.style.color = '#e53e3e';
+                            errorMessage.innerHTML = `<p>Error loading calendar events.</p><p>Please try refreshing the page.</p>`;
+                            calendarEl.appendChild(errorMessage);
                             failureCallback(error);
                         });
                 },
@@ -368,7 +408,7 @@
                         return;
                     }
                     
-                    const date = info.event.start.toISOString().split('T')[0];
+                    const date = formatDate(info.event.start);
                     
                     // If the event has expenses data already, use it
                     if (info.event.extendedProps.expenses) {
@@ -378,21 +418,31 @@
                     
                     // Otherwise fetch the expenses for this date
                     fetch(`/api/expenses?start_date=${date}&end_date=${date}`)
-                        .then(response => response.json())
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                            }
+                            return response.json();
+                        })
                         .then(data => {
                             showExpenseModal(date, data);
                         })
                         .catch(error => {
                             console.error('Error fetching expenses:', error);
-                            // Still show the modal, but with no expenses
+                            // Still show the modal, but with no expenses and an error message
                             showExpenseModal(date, []);
                         });
                 },
                 dateClick: function(info) {
-                    const clickedDate = info.dateStr;
+                    const clickedDate = formatDate(info.dateStr);
                     
                     fetch(`/api/expenses?start_date=${clickedDate}&end_date=${clickedDate}`)
-                        .then(response => response.json())
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                            }
+                            return response.json();
+                        })
                         .then(data => {
                             showExpenseModal(clickedDate, data);
                         })
@@ -403,6 +453,23 @@
                 }
             });
             calendar.render();
+            
+            // Check if we need to refresh the calendar (after editing expenses)
+            if (sessionStorage.getItem('expense_edited_date')) {
+                // Refresh the calendar to show updated data
+                calendar.refetchEvents();
+                // Clear the flag
+                sessionStorage.removeItem('expense_edited_date');
+            }
+        });
+        
+        // Add event listener to refresh calendar when returning to this page
+        window.addEventListener('pageshow', function(event) {
+            // Check if the page is being shown from the bfcache (back/forward navigation)
+            if (event.persisted && calendar) {
+                // Refresh the calendar data
+                calendar.refetchEvents();
+            }
         });
     </script>
 </body>

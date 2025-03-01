@@ -25,3 +25,12 @@
  * Running on http://127.0.0.1:10000
  * Running on http://192.168.0.100:10000
 2025-03-01 14:23:53,438 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-03-01 14:36:27,912 - app - INFO - Database tables found: ['budget', 'expense', 'user']
+2025-03-01 14:36:27,947 - app - INFO - Total users in database: 0
+2025-03-01 14:36:28,406 - app - INFO - Database write test successful
+2025-03-01 14:36:28,410 - __main__ - INFO - Database verification successful
+2025-03-01 14:36:28,453 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:10000
+ * Running on http://192.168.0.100:10000
+2025-03-01 14:36:28,454 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
