@@ -59,6 +59,14 @@ if '@' in masked_url:
     masked_url = masked_url.split('@')[0].split('://')[0] + '://*****:*****@' + masked_url.split('@')[1]
 logger.info(f"Using database: {masked_url}")
 
+# Log database type for debugging
+if database_url.startswith('sqlite'):
+    logger.warning("Using SQLite database - data may not persist in production environment")
+elif database_url.startswith('postgresql'):
+    logger.info("Using PostgreSQL database - data should persist between restarts")
+else:
+    logger.warning(f"Using unknown database type: {database_url.split('://')[0]}")
+
 # Update the app configuration
 app.config.update(
     SQLALCHEMY_DATABASE_URI=database_url,
@@ -160,14 +168,36 @@ class Expense(db.Model):
 def verify_database():
     """Verify database integrity and connectivity"""
     try:
+        # Check database connection type
+        db_type = str(db.engine.url).split('://')[0]
+        app.logger.info(f"Database type: {db_type}")
+        
         # Check if tables exist
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
         app.logger.info(f"Database tables found: {tables}")
         
+        # Verify required tables exist
+        required_tables = ['user', 'budget', 'expense']
+        missing_tables = [table for table in required_tables if table not in tables]
+        if missing_tables:
+            app.logger.error(f"Missing required tables: {missing_tables}")
+            # Create missing tables
+            app.logger.info("Attempting to create missing tables...")
+            db.create_all()
+            app.logger.info("Tables created. Rechecking...")
+            tables = inspect(db.engine).get_table_names()
+            app.logger.info(f"Tables after creation: {tables}")
+        
         # Count users
         user_count = User.query.count()
         app.logger.info(f"Total users in database: {user_count}")
+        
+        # List all users for debugging (only in development)
+        if os.environ.get('FLASK_DEBUG', 'False').lower() == 'true':
+            users = User.query.all()
+            for user in users:
+                app.logger.debug(f"User: {user.username}, Email: {user.email}")
         
         # Only perform write test in development mode
         if os.environ.get('FLASK_DEBUG', 'False').lower() == 'true':
@@ -814,6 +844,40 @@ def get_calendar_events():
         logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/system/db_status')
+def db_status():
+    """API endpoint to check database status - for debugging only"""
+    try:
+        # Check database connection
+        db_type = str(db.engine.url).split('://')[0]
+        
+        # Check if tables exist
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
+        
+        # Count users
+        user_count = User.query.count()
+        
+        # Get database info
+        status = {
+            "status": "connected",
+            "database_type": db_type,
+            "tables": tables,
+            "user_count": user_count,
+            "environment": "production" if not app.debug else "development",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Error checking database status: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }), 500
+
 if __name__ == '__main__':
     # Create all database tables
     with app.app_context():
@@ -837,8 +901,20 @@ else:
     # When running with gunicorn, initialize the database
     with app.app_context():
         try:
+            # Check if database is PostgreSQL
+            is_postgresql = str(db.engine.url).startswith('postgresql')
+            logger.info(f"Production mode with {'PostgreSQL' if is_postgresql else 'SQLite'} database")
+            
+            # Create tables if they don't exist
             db.create_all()
             logger.info("Database tables created successfully in production mode")
+            
+            # Verify database setup
+            if verify_database():
+                logger.info("Database verification successful in production mode")
+            else:
+                logger.error("Database verification failed in production mode")
+                
         except Exception as e:
             logger.error(f"Database initialization error in production mode: {str(e)}")
             logger.error(traceback.format_exc())
