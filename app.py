@@ -145,6 +145,20 @@ def verify_database():
         tables = inspector.get_table_names()
         app.logger.info(f"Database tables found: {tables}")
         
+        # Verify table structure
+        expected_tables = {'user', 'budget', 'expense'}
+        if not all(table in tables for table in expected_tables):
+            app.logger.warning("Missing required tables. Recreating database schema...")
+            db.drop_all()
+            db.create_all()
+        
+        # Clean up any existing test users
+        test_user = User.query.filter_by(username="test_verify_db").first()
+        if test_user:
+            db.session.delete(test_user)
+            db.session.commit()
+            app.logger.info("Cleaned up existing test user")
+        
         # Count users
         user_count = User.query.count()
         app.logger.info(f"Total users in database: {user_count}")
@@ -157,14 +171,27 @@ def verify_database():
         test_user.set_password("test123")
         db.session.add(test_user)
         db.session.commit()
+        
+        # Test relationships
+        test_budget = Budget(
+            month="2025-03",
+            amount=1000.0,
+            user_id=test_user.id
+        )
+        db.session.add(test_budget)
+        db.session.commit()
+        
+        # Clean up test data
+        db.session.delete(test_budget)
         db.session.delete(test_user)
         db.session.commit()
-        app.logger.info("Database write test successful")
         
+        app.logger.info("Database verification successful")
         return True
     except Exception as e:
         app.logger.error(f"Database verification failed: {str(e)}")
         app.logger.error(traceback.format_exc())
+        db.session.rollback()
         return False
 
 @app.before_request
@@ -457,14 +484,21 @@ def calendar():
 
 if __name__ == '__main__':
     with app.app_context():
-        # Create all database tables
-        db.create_all()
-        
-        # Verify database setup
-        if verify_database():
-            logger.info("Database verification successful")
-        else:
-            logger.error("Database verification failed")
+        try:
+            # Drop all tables and recreate them
+            db.drop_all()
+            db.create_all()
+            app.logger.info("Database tables created successfully")
+            
+            # Verify database setup
+            if verify_database():
+                app.logger.info("Database verification successful")
+            else:
+                app.logger.error("Database verification failed")
+            
+        except Exception as e:
+            app.logger.error(f"Database initialization failed: {str(e)}")
+            app.logger.error(traceback.format_exc())
         
         # Start the application
         app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

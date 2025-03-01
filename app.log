@@ -1,0 +1,18 @@
+2025-03-01 11:24:55,298 - app - INFO - Database tables created successfully
+2025-03-01 11:24:55,300 - app - INFO - Database tables found: ['budget', 'expense', 'user']
+2025-03-01 11:24:55,326 - app - INFO - Total users in database: 0
+2025-03-01 11:24:55,886 - app - INFO - Database verification successful
+2025-03-01 11:24:55,886 - app - INFO - Database verification successful
+2025-03-01 11:24:55,935 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.100:5000
+2025-03-01 11:24:55,935 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-03-01 11:24:55,940 - werkzeug - INFO -  * Restarting with stat
+2025-03-01 11:24:58,004 - app - INFO - Database tables created successfully
+2025-03-01 11:24:58,007 - app - INFO - Database tables found: ['budget', 'expense', 'user']
+2025-03-01 11:24:58,036 - app - INFO - Total users in database: 0
+2025-03-01 11:24:58,776 - app - INFO - Database verification successful
+2025-03-01 11:24:58,776 - app - INFO - Database verification successful
+2025-03-01 11:24:58,789 - werkzeug - WARNING -  * Debugger is active!
+2025-03-01 11:24:58,796 - werkzeug - INFO -  * Debugger PIN: 361-874-244

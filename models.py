@@ -15,8 +15,11 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(256), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    budgets = db.relationship('Budget', backref='user', lazy=True, cascade="all, delete-orphan")
-    expenses = db.relationship('Expense', backref='user', lazy=True, cascade="all, delete-orphan")
+    # Define cascading relationships
+    budgets = db.relationship('Budget', backref='user', lazy=True, 
+                            cascade="all, delete-orphan")
+    expenses = db.relationship('Expense', backref='user', lazy=True, 
+                             cascade="all, delete-orphan")
 
     def set_password(self, password):
         if not password or len(password) < 6:
@@ -49,7 +52,8 @@ class Budget(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     month = db.Column(db.String(7), nullable=False)
     amount = db.Column(db.Float, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), 
+                       nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     __table_args__ = (
@@ -64,5 +68,6 @@ class Expense(db.Model):
     date = db.Column(db.Date, nullable=False)
     category = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Float, nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), 
+                       nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow) 
