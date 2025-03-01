@@ -9,7 +9,7 @@ import sys
 import traceback
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from werkzeug.urls import url_parse
+from urllib.parse import urlparse
 
 # Enhanced logging configuration
 logging.basicConfig(
@@ -316,7 +316,7 @@ def login():
 
                 # Handle next page
                 next_page = request.args.get('next')
-                if not next_page or url_parse(next_page).netloc != '':
+                if not next_page or urlparse(next_page).netloc != '':
                     next_page = url_for('index')
                 
                 flash('Login successful!', 'success')
@@ -502,6 +502,7 @@ init_db()
 # Application startup
 if __name__ == '__main__':
     try:
+        # Use the PORT environment variable that Render provides
         port = int(os.environ.get('PORT', 10000))
         app.run(host='0.0.0.0', port=port)
     except Exception as e:

@@ -3,11 +3,22 @@ services:
     name: finance-tracker
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --config gunicorn_config.py app:app
+    startCommand: gunicorn app:app --config gunicorn_config.py
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: 3.11.0
+      - key: PORT
+        fromService:
+          type: web
+          property: port
       - key: SECRET_KEY
-        fromVariable: SECRET_KEY
+        generateValue: true
       - key: DATABASE_URL
-        fromVariable: DATABASE_URL 
+        fromDatabase:
+          name: finance_db
+          property: connectionString
+
+databases:
+  - name: finance_db
+    databaseName: finance_tracker
+    ipAllowList: [] 
