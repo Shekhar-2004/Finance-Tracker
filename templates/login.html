@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Finance Tracker</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
     <style>
         * {
             margin: 0;
@@ -20,17 +19,43 @@
             line-height: 1.6;
             min-height: 100vh;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
         }
 
-        .login-container {
+        .navbar {
             background: white;
-            padding: 2rem;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+            margin-bottom: 2rem;
+        }
+
+        .nav-links {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #4a5568;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 2rem auto;
+            padding: 2.5rem;
+            background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            width: 100%;
-            max-width: 400px;
             animation: fadeIn 0.5s ease-out;
         }
 
@@ -40,49 +65,88 @@
         }
 
         h1 {
-            font-size: 1.875rem;
+            font-size: 1.8rem;
             font-weight: 600;
             color: #2d3748;
             margin-bottom: 1.5rem;
             text-align: center;
         }
 
-        .form-group {
-            margin-bottom: 1.5rem;
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
         }
 
-        label {
+        .form-group {
+            position: relative;
+        }
+
+        .form-group label {
             display: block;
             margin-bottom: 0.5rem;
             color: #4a5568;
             font-weight: 500;
+            font-size: 0.95rem;
         }
 
-        input {
+        .form-group input {
             width: 100%;
-            padding: 0.75rem;
-            border: 2px solid #e2e8f0;
-            border-radius: 6px;
+            padding: 0.75rem 1rem;
             font-size: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
             transition: all 0.3s ease;
+            background: #f8fafc;
         }
 
-        input:focus {
+        .form-group input:focus {
             outline: none;
             border-color: #4299e1;
             box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+            background: white;
+        }
+
+        .form-group .material-icons {
+            position: absolute;
+            right: 1rem;
+            top: 2.3rem;
+            color: #a0aec0;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: -0.5rem;
+        }
+
+        .remember-me input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            accent-color: #4299e1;
+        }
+
+        .remember-me label {
+            color: #4a5568;
+            font-size: 0.9rem;
         }
 
         button {
-            width: 100%;
-            padding: 0.75rem;
             background: #4299e1;
             color: white;
             border: none;
-            border-radius: 6px;
+            padding: 0.75rem;
+            border-radius: 8px;
             font-weight: 500;
+            font-size: 1rem;
             cursor: pointer;
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
         }
 
         button:hover {
@@ -90,70 +154,165 @@
             transform: translateY(-1px);
         }
 
-        .error {
-            color: #e53e3e;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-
         .register-link {
             text-align: center;
-            margin-top: 1rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e2e8f0;
+            color: #4a5568;
+            font-size: 0.95rem;
         }
 
         .register-link a {
             color: #4299e1;
             text-decoration: none;
+            font-weight: 500;
         }
 
         .register-link a:hover {
             text-decoration: underline;
         }
+
+        .flash-messages {
+            max-width: 400px;
+            margin: 1rem auto;
+            padding: 0 1rem;
+        }
+
+        .flash-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            font-size: 0.95rem;
+        }
+
+        .flash-message.error {
+            background-color: #fed7d7;
+            color: #c53030;
+        }
+
+        .flash-message.success {
+            background-color: #c6f6d5;
+            color: #2f855a;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 1rem;
+            top: 2.3rem;
+            color: #a0aec0;
+            cursor: pointer;
+            user-select: none;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="login-box">
-            <h2>Login</h2>
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            <form method="POST" action="{{ url_for('login') }}">
-                {{ form.hidden_tag() }}
-                <div class="form-group">
-                    {{ form.username.label }}
-                    {{ form.username(class="form-control") }}
-                    {% if form.username.errors %}
-                        {% for error in form.username.errors %}
-                            <span class="error">{{ error }}</span>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-                <div class="form-group">
-                    {{ form.password.label }}
-                    {{ form.password(class="form-control") }}
-                    {% if form.password.errors %}
-                        {% for error in form.password.errors %}
-                            <span class="error">{{ error }}</span>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-                <div class="form-group">
-                    {{ form.remember_me(class="form-check-input") }}
-                    {{ form.remember_me.label(class="form-check-label") }}
-                </div>
-                <div class="form-group">
-                    {{ form.submit(class="btn btn-primary") }}
-                </div>
-            </form>
-            <div class="register-link">
-                <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+    <nav class="navbar">
+        <div class="nav-links">
+            <a href="#" style="pointer-events: none; opacity: 0.6;">
+                <i class="material-icons">account_balance_wallet</i>
+                Finance Tracker
+            </a>
+        </div>
+    </nav>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-message {{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
             </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="container">
+        <h1>Welcome Back</h1>
+        
+        <form method="POST" action="{{ url_for('login') }}" class="login-form">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" 
+                       id="username" 
+                       name="username" 
+                       required 
+                       autocomplete="username"
+                       placeholder="Enter your username">
+                <i class="material-icons">person</i>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" 
+                       id="password" 
+                       name="password" 
+                       required 
+                       autocomplete="current-password"
+                       placeholder="Enter your password">
+                <span class="password-toggle" onclick="togglePassword()">
+                    <i class="material-icons">visibility_off</i>
+                </span>
+            </div>
+
+            <div class="remember-me">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember">Remember me</label>
+            </div>
+
+            <button type="submit">
+                <i class="material-icons">login</i>
+                Sign In
+            </button>
+        </form>
+
+        <div class="register-link">
+            Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
         </div>
     </div>
+
+    <script>
+        // Password visibility toggle
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.querySelector('.password-toggle i');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.textContent = 'visibility';
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.textContent = 'visibility_off';
+            }
+        }
+
+        // Form validation
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                e.preventDefault();
+                alert('Please enter both username and password');
+                return false;
+            }
+        });
+
+        // Input animations
+        const inputs = document.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                this.parentElement.style.transform = 'scale(1.02)';
+            });
+            
+            input.addEventListener('blur', function() {
+                this.parentElement.style.transform = 'scale(1)';
+            });
+        });
+    </script>
 </body>
-</html> 
+</html>
