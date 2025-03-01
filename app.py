@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, session, g
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask_login import UserMixin, LoginManager, login_required, current_user, login_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_wtf.csrf import CSRFProtect, CSRFError
@@ -10,12 +10,11 @@ import sys
 import traceback
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from urllib.parse import urlparse
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import inspect
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
-from wtforms.validators import DataRequired
+from wtforms.validators import DataRequired, Email, Length, ValidationError
 from sqlalchemy.orm import Session
 
 # Initialize Flask app
@@ -41,16 +40,16 @@ app.config.update(
     SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///finance.db').replace("postgres://", "postgresql://", 1),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
-    SESSION_COOKIE_SECURE=False,  # Changed to False for development
+    SESSION_COOKIE_SECURE=False if app.debug else True,  # True in production
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),
-    REMEMBER_COOKIE_SECURE=False,  # Changed to False for development
+    REMEMBER_COOKIE_SECURE=False if app.debug else True,  # True in production
     REMEMBER_COOKIE_HTTPONLY=True,
     REMEMBER_COOKIE_DURATION=timedelta(days=7),
     WTF_CSRF_ENABLED=True,
     WTF_CSRF_TIME_LIMIT=3600,  # 1 hour
-    WTF_CSRF_SSL_STRICT=False  # Changed to False for development
+    WTF_CSRF_SSL_STRICT=False if app.debug else True  # True in production
 )
 
 # Initialize extensions
@@ -58,6 +57,8 @@ db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = "Please log in to access this page."
+login_manager.login_message_category = "info"
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -72,7 +73,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     budgets = db.relationship('Budget', backref='user', lazy=True, cascade="all, delete-orphan")
     expenses = db.relationship('Expense', backref='user', lazy=True, cascade="all, delete-orphan")
@@ -109,7 +110,7 @@ class Budget(db.Model):
     month = db.Column(db.String(7), nullable=False)  # Store as YYYY-MM
     amount = db.Column(db.Float, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     
     __table_args__ = (
         db.UniqueConstraint('user_id', 'month', name='unique_user_month'),
@@ -127,7 +128,7 @@ class Expense(db.Model):
     category = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
         return f'<Expense {self.date} {self.category}: {self.amount}>'
@@ -174,7 +175,8 @@ def before_request():
 def handle_csrf_error(e):
     """Handle CSRF token errors"""
     logger.error(f"CSRF error occurred: {str(e)}")
-    return jsonify({"error": "CSRF token validation failed"}), 400
+    flash("Security error occurred. Please try again.", "error")
+    return render_template('error.html', error="CSRF token validation failed"), 400
 
 @app.errorhandler(404)
 def not_found_error(error):
@@ -190,45 +192,54 @@ def internal_error(error):
     logger.error(traceback.format_exc())
     return render_template('error.html', error="Internal server error"), 500
 
+class RegistrationForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired()])
+    submit = SubmitField('Register')
+
+    def validate_username(self, username):
+        user = User.query.filter_by(username=username.data).first()
+        if user:
+            raise ValidationError('Username already exists')
+
+    def validate_email(self, email):
+        user = User.query.filter_by(email=email.data.lower()).first()
+        if user:
+            raise ValidationError('Email already registered')
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     """User registration route"""
     if current_user.is_authenticated:
         return redirect(url_for('expense'))
     
-    if request.method == 'POST':
+    form = RegistrationForm()
+    if form.validate_on_submit():
         try:
-            username = User.validate_username(request.form.get('username'))
-            email = User.validate_email(request.form.get('email'))
-            password = request.form.get('password')
+            if form.password.data != form.confirm_password.data:
+                flash('Passwords do not match', 'error')
+                return render_template('register.html', form=form)
             
-            if User.query.filter_by(username=username).first():
-                flash('Username already exists', 'error')
-                return render_template('register.html')
-            
-            if User.query.filter_by(email=email).first():
-                flash('Email already registered', 'error')
-                return render_template('register.html')
-            
-            user = User(username=username, email=email)
-            user.set_password(password)
+            user = User(username=form.username.data, email=form.email.data.lower())
+            user.set_password(form.password.data)
             
             db.session.add(user)
             db.session.commit()
-            logger.info(f"New user registered: {username}")
+            logger.info(f"New user registered: {user.username}")
             
             login_user(user)
+            flash('Registration successful! Welcome to Finance Tracker.', 'success')
             return redirect(url_for('budget_setup'))
             
-        except ValueError as e:
-            flash(str(e), 'error')
-            logger.warning(f"Registration validation error: {str(e)}")
         except Exception as e:
+            db.session.rollback()
             flash('Registration failed. Please try again.', 'error')
             logger.error(f"Registration error: {str(e)}")
             logger.error(traceback.format_exc())
             
-    return render_template('register.html')
+    return render_template('register.html', form=form)
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
@@ -238,10 +249,27 @@ class LoginForm(FlaskForm):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """User login route"""
+    if current_user.is_authenticated:
+        return redirect(url_for('expense'))
+        
     form = LoginForm()
     if form.validate_on_submit():
-        # Your login logic here
-        pass
+        user = User.query.filter_by(username=form.username.data).first()
+        if user and user.check_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            logger.info(f"User logged in: {user.username}")
+            
+            next_page = request.args.get('next')
+            if not next_page or not next_page.startswith('/'):
+                next_page = url_for('expense')
+                
+            flash('Login successful!', 'success')
+            return redirect(next_page)
+        else:
+            flash('Invalid username or password', 'error')
+            logger.warning(f"Failed login attempt for username: {form.username.data}")
+            
     return render_template('login.html', form=form)
 
 @app.route('/logout')
@@ -251,6 +279,7 @@ def logout():
     username = current_user.username
     logout_user()
     logger.info(f"User logged out: {username}")
+    flash('You have been logged out', 'info')
     return redirect(url_for('login'))
 
 @app.route('/budget_setup', methods=['GET', 'POST'])
@@ -268,54 +297,96 @@ def budget_setup():
             return redirect(url_for('budget_setup'))
         
         try:
+            # Validate month format (YYYY-MM)
+            datetime.strptime(month, '%Y-%m')
+            
+            # Validate budget amount
             amount = float(budget_amount)
             if amount <= 0:
-                raise ValueError
-        except (ValueError, InvalidOperation):
-            flash('Amount must be a positive number', 'error')
+                raise ValueError("Budget amount must be positive")
+                
+        except ValueError as e:
+            flash(str(e) if "Budget amount" in str(e) else 'Amount must be a positive number', 'error')
             return redirect(url_for('budget_setup'))
         
-        existing_budget = Budget.query.filter_by(
-            user_id=current_user.id,
-            month=month
-        ).first()
-        
-        if existing_budget:
-            existing_budget.amount = amount
-            logger.info(f"Updated budget for {month}: {amount}")
-        else:
-            new_budget = Budget(
-                month=month,
-                amount=amount,
-                user_id=current_user.id
-            )
-            db.session.add(new_budget)
-            logger.info(f"Created new budget for {month}: {amount}")
-        
-        db.session.commit()
-        flash('Budget saved successfully!', 'success')
-        return redirect(url_for('expense'))
+        try:
+            existing_budget = Budget.query.filter_by(
+                user_id=current_user.id,
+                month=month
+            ).first()
+            
+            if existing_budget:
+                existing_budget.amount = amount
+                logger.info(f"Updated budget for {month}: {amount}")
+                flash_message = 'Budget updated successfully!'
+            else:
+                new_budget = Budget(
+                    month=month,
+                    amount=amount,
+                    user_id=current_user.id
+                )
+                db.session.add(new_budget)
+                logger.info(f"Created new budget for {month}: {amount}")
+                flash_message = 'Budget created successfully!'
+            
+            db.session.commit()
+            flash(flash_message, 'success')
+            return redirect(url_for('expense'))
+            
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            logger.error(f"Database error in budget_setup: {str(e)}")
+            flash('An error occurred while saving your budget. Please try again.', 'error')
+            return redirect(url_for('budget_setup'))
 
-    return render_template('budget_setup.html')
+    # Get existing budget for the current month if any
+    current_month = datetime.now(timezone.utc).strftime('%Y-%m')
+    existing_budget = Budget.query.filter_by(
+        user_id=current_user.id,
+        month=current_month
+    ).first()
+    
+    # Ensure categories are defined
+    categories = get_categories()
+    if categories is None:
+        categories = []
+
+    return render_template('budget_setup.html', 
+                          categories=categories, 
+                          budget=existing_budget,
+                          current_month=current_month)
 
 @app.route('/')
 @app.route('/expense')
 @login_required
 def expense():
     """Main expense tracking page"""
-    categories = get_categories()  # Replace with your actual function to fetch categories
-
+    categories = get_categories()
     if categories is None:
         categories = []
 
     app.logger.debug(f"Categories: {categories}")
 
-    return render_template('expense.html', categories=categories)
+    # Get current month's budget
+    current_month = datetime.now(timezone.utc).strftime('%Y-%m')
+    budget = Budget.query.filter_by(
+        user_id=current_user.id,
+        month=current_month
+    ).first()
+    
+    # If no budget exists, redirect to budget setup
+    if not budget:
+        flash('Please set up your monthly budget first', 'info')
+        return redirect(url_for('budget_setup'))
+
+    return render_template('expense.html', 
+                          categories=categories,
+                          budget=budget)
 
 def get_categories():
-    """Mock function to return categories"""
-    # Replace this with actual logic to fetch categories from the database
-    return ["Food", "Transport", "Utilities", "Entertainment"]
+    """Function to return expense categories"""
+    # Categories from CONTEXT.md
+    return ["Auto", "Online Food", "College Mess", "Instamart", "Miscellaneous"]
 
 @app.route('/api/expenses', methods=['POST'])
 @login_required
@@ -324,15 +395,24 @@ def add_expense():
     try:
         data = request.get_json()
         if not data:
-            raise ValueError("No data provided")
+            return jsonify({"error": "No data provided"}), 400
         
         date_str = data.get('date')
         expenses = data.get('expenses', {})
         
+        if not date_str:
+            return jsonify({"error": "Date is required"}), 400
+            
+        if not expenses:
+            return jsonify({"error": "No expense data provided"}), 400
+        
         try:
             expense_date = datetime.fromisoformat(date_str).date()
         except ValueError:
-            expense_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            try:
+                expense_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({"error": "Invalid date format. Use YYYY-MM-DD"}), 400
         
         # Delete existing expenses for this date
         Expense.query.filter_by(
@@ -341,7 +421,12 @@ def add_expense():
         ).delete()
         
         # Add new expenses
+        valid_categories = get_categories()
         for category, amount in expenses.items():
+            if category not in valid_categories:
+                logger.warning(f"Invalid category: {category}")
+                continue
+                
             try:
                 amount = float(amount)
                 if amount > 0:
@@ -364,7 +449,7 @@ def add_expense():
         db.session.rollback()
         logger.error(f"Error saving expenses: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/expenses', methods=['GET'])
 @login_required
@@ -374,15 +459,27 @@ def get_expenses():
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
+        if not start_date or not end_date:
+            return jsonify({"error": "Both start_date and end_date are required"}), 400
+        
         try:
             start = datetime.fromisoformat(start_date).date()
         except ValueError:
-            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            try:
+                start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({"error": "Invalid start_date format. Use YYYY-MM-DD"}), 400
             
         try:
             end = datetime.fromisoformat(end_date).date()
         except ValueError:
-            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            try:
+                end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                return jsonify({"error": "Invalid end_date format. Use YYYY-MM-DD"}), 400
+        
+        if start > end:
+            return jsonify({"error": "start_date cannot be after end_date"}), 400
         
         expenses = Expense.query.filter(
             Expense.user_id == current_user.id,
@@ -403,7 +500,7 @@ def get_expenses():
     except Exception as e:
         logger.error(f"Error retrieving expenses: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/budget', methods=['GET'])
 @login_required
@@ -412,7 +509,13 @@ def get_budget():
     try:
         month = request.args.get('month')
         if not month:
-            raise ValueError("Month parameter is required")
+            return jsonify({"error": "Month parameter is required"}), 400
+        
+        try:
+            # Validate month format
+            datetime.strptime(month, '%Y-%m')
+        except ValueError:
+            return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
         
         budget = Budget.query.filter_by(
             user_id=current_user.id,
@@ -429,41 +532,243 @@ def get_budget():
     except Exception as e:
         logger.error(f"Error retrieving budget: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/update_budget', methods=['POST'])
+@login_required
+def update_budget():
+    """API endpoint to update or create a budget"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
+        month = data.get('month')
+        budget_amount = data.get('budget')
+        
+        if not month or not budget_amount:
+            return jsonify({"error": "Month and budget amount are required"}), 400
+        
+        try:
+            # Validate month format
+            datetime.strptime(month, '%Y-%m')
+        except ValueError:
+            return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
+            
+        try:
+            amount = float(budget_amount)
+            if amount <= 0:
+                return jsonify({"error": "Budget amount must be positive"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid budget amount"}), 400
+            
+        existing_budget = Budget.query.filter_by(
+            user_id=current_user.id,
+            month=month
+        ).first()
+        
+        if existing_budget:
+            existing_budget.amount = amount
+            message = "Budget updated successfully"
+        else:
+            new_budget = Budget(
+                month=month,
+                amount=amount,
+                user_id=current_user.id
+            )
+            db.session.add(new_budget)
+            message = "Budget created successfully"
+            
+        db.session.commit()
+        logger.info(f"{message} for {month}: {amount}")
+        return jsonify({"message": message, "amount": amount})
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating budget: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/summary')
 @login_required
 def summary():
     """Monthly expense summary page"""
-    return render_template('summary.html')
+    # Get current month
+    current_month = datetime.now(timezone.utc).strftime('%Y-%m')
+    
+    # Check if budget exists for current month
+    budget = Budget.query.filter_by(
+        user_id=current_user.id,
+        month=current_month
+    ).first()
+    
+    if not budget:
+        flash('Please set up your monthly budget first', 'info')
+        return redirect(url_for('budget_setup'))
+        
+    return render_template('summary.html', current_month=current_month)
+
+@app.route('/api/summary')
+@login_required
+def get_summary():
+    """API endpoint to get summary data for a month"""
+    try:
+        month = request.args.get('month')
+        if not month:
+            return jsonify({"error": "Month parameter is required"}), 400
+            
+        try:
+            # Validate month format
+            datetime.strptime(month, '%Y-%m')
+        except ValueError:
+            return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
+            
+        # Get budget for the month
+        budget = Budget.query.filter_by(
+            user_id=current_user.id,
+            month=month
+        ).first()
+        
+        budget_amount = budget.amount if budget else 0
+        
+        # Get all expenses for the month
+        month_start = f"{month}-01"
+        next_month = f"{int(month[:4]) + int(month[5:]) // 12}-{(int(month[5:]) % 12) + 1:02d}"
+        month_end = f"{next_month}-01"
+        
+        try:
+            start_date = datetime.strptime(month_start, '%Y-%m-%d').date()
+            end_date = datetime.strptime(month_end, '%Y-%m-%d').date() - timedelta(days=1)
+        except ValueError:
+            return jsonify({"error": "Error calculating date range"}), 500
+            
+        expenses = Expense.query.filter(
+            Expense.user_id == current_user.id,
+            Expense.date >= start_date,
+            Expense.date <= end_date
+        ).all()
+        
+        # Calculate total spent and category breakdown
+        total_spent = 0
+        category_breakdown = {}
+        
+        for expense in expenses:
+            total_spent += expense.amount
+            if expense.category in category_breakdown:
+                category_breakdown[expense.category] += expense.amount
+            else:
+                category_breakdown[expense.category] = expense.amount
+                
+        # Calculate remaining budget
+        remaining_budget = budget_amount - total_spent
+        
+        # Prepare summary data
+        summary_data = {
+            "month": month,
+            "budget": budget_amount,
+            "total_spent": total_spent,
+            "remaining_budget": remaining_budget,
+            "category_breakdown": category_breakdown
+        }
+        
+        logger.debug(f"Generated summary for {month}")
+        return jsonify(summary_data)
+        
+    except Exception as e:
+        logger.error(f"Error generating summary: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/calendar')
 @login_required
 def calendar():
     """Calendar view of expenses"""
+    # Check if budget exists for current month
+    current_month = datetime.now(timezone.utc).strftime('%Y-%m')
+    budget = Budget.query.filter_by(
+        user_id=current_user.id,
+        month=current_month
+    ).first()
+    
+    if not budget:
+        flash('Please set up your monthly budget first', 'info')
+        return redirect(url_for('budget_setup'))
+        
     return render_template('calendar.html')
 
-@app.route('/api/update_budget', methods=['POST'])
-def update_budget():
-    data = request.get_json()
+@app.route('/api/calendar_events')
+@login_required
+def get_calendar_events():
+    """API endpoint to get expense data for calendar view"""
     try:
-        datetime.strptime(data['month'], '%Y-%m')  # Validate format
-    except ValueError:
-        return jsonify({"error": "Use YYYY-MM format"}), 400
-
-    # Add logic to update the budget in the database
-    # ...
-
-@app.route('/api/summary')
-def get_summary():
-    month = request.args.get('month')
-    if not month:
-        return jsonify({"error": "Month parameter is required"}), 400
-
-    expenses = Expense.query.filter(Expense.date.like(f'{month}%')).all()
-    # Process expenses to generate summary
-    # ...
+        start_date = request.args.get('start')
+        end_date = request.args.get('end')
+        
+        if not start_date or not end_date:
+            return jsonify({"error": "Both start and end parameters are required"}), 400
+            
+        try:
+            start = datetime.fromisoformat(start_date.replace('Z', '+00:00')).date()
+            end = datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
+        except ValueError:
+            return jsonify({"error": "Invalid date format"}), 400
+            
+        expenses = Expense.query.filter(
+            Expense.user_id == current_user.id,
+            Expense.date >= start,
+            Expense.date <= end
+        ).all()
+        
+        # Group expenses by date and category
+        events = []
+        date_totals = {}
+        
+        for expense in expenses:
+            date_str = expense.date.strftime('%Y-%m-%d')
+            
+            # Track daily totals
+            if date_str in date_totals:
+                date_totals[date_str] += expense.amount
+            else:
+                date_totals[date_str] = expense.amount
+                
+            # Create event for each expense
+            events.append({
+                'title': f"{expense.category}: ₹{expense.amount:.2f}",
+                'start': date_str,
+                'category': expense.category,
+                'amount': expense.amount
+            })
+            
+        # Add daily total events
+        for date_str, total in date_totals.items():
+            events.append({
+                'title': f"Total: ₹{total:.2f}",
+                'start': date_str,
+                'allDay': True,
+                'display': 'background',
+                'backgroundColor': '#4299e1',
+                'isTotal': True
+            })
+            
+        return jsonify(events)
+        
+    except Exception as e:
+        logger.error(f"Error retrieving calendar events: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    with app.app_context():
+        # Create all database tables
+        db.create_all()
+        
+        # Verify database setup
+        if verify_database():
+            logger.info("Database verification successful")
+        else:
+            logger.error("Database verification failed")
+        
+        # Start the application
+        port = int(os.environ.get("PORT", 10000))
+        app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true')
