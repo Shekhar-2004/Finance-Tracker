@@ -303,60 +303,35 @@ def register():
 # Enhanced login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    try:
-        logger.debug("=== Starting Login Process ===")
-        debug_request(request)
-        log_user_state()
+    """Handle user login"""
+    if current_user.is_authenticated:
+        return redirect(url_for('expense'))
 
-        if current_user.is_authenticated:
-            logger.debug("Authenticated user attempting to login - redirecting to index")
-            return redirect(url_for('index'))
-
-        if request.method == 'POST':
-            logger.debug("Processing login POST request")
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
             
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '')
-
-            logger.debug(f"Login attempt for username: {username}")
-
-            if not username or not password:
-                logger.warning("Missing username or password")
-                return render_template('login.html', error="Please enter both username and password")
-
-            try:
-                user = User.query.filter_by(username=username).first()
-                
-                if user is None:
-                    logger.warning(f"No user found with username: {username}")
-                    return render_template('login.html', error="Invalid username or password")
-
-                if not user.check_password(password):
-                    logger.warning(f"Invalid password for user: {username}")
-                    return render_template('login.html', error="Invalid username or password")
-
-                login_user(user)
-                logger.info(f"Successfully logged in user: {username}")
-
-                # Handle next page
-                next_page = request.args.get('next')
-                if not next_page or urlparse(next_page).netloc != '':
-                    next_page = url_for('index')
-                
-                flash('Login successful!', 'success')
-                return redirect(next_page)
-
-            except SQLAlchemyError as se:
-                logger.error(f"Database error during login: {str(se)}")
-                return render_template('login.html', 
-                    error="Database error occurred. Please try again.")
-
-        return render_template('login.html')
-
-    except Exception as e:
-        logger.error("Unexpected error in login route", exc_info=True)
-        return render_template('error.html', 
-            error="An unexpected error occurred. Please try again later.")
+            # Check if user has set up budget for current month
+            current_month = datetime.now().strftime('%Y-%m')
+            has_budget = Budget.query.filter_by(
+                user_id=user.id,
+                month=current_month
+            ).first()
+            
+            next_page = request.args.get('next')
+            if not next_page or not next_page.startswith('/'):
+                next_page = url_for('budget_setup' if not has_budget else 'expense')
+            
+            return redirect(next_page)
+        
+        flash('Invalid username or password', 'error')
+    
+    return render_template('login.html')
 
 # Enhanced logout route
 @app.route('/logout')
@@ -519,6 +494,49 @@ def update_budget():
 @app.route('/error')
 def error():
     return render_template('error.html')
+
+@app.route('/budget_setup', methods=['GET', 'POST'])
+@login_required
+def budget_setup():
+    """Handle budget setup for new users"""
+    try:
+        if request.method == 'POST':
+            budget_amount = float(request.form.get('budget'))
+            if budget_amount <= 0:
+                flash('Please enter a valid budget amount greater than 0', 'error')
+                return redirect(url_for('budget_setup'))
+
+            # Get current month in YYYY-MM format
+            current_month = datetime.now().strftime('%Y-%m')
+            
+            # Check if budget already exists for this month
+            existing_budget = Budget.query.filter_by(
+                user_id=current_user.id,
+                month=current_month
+            ).first()
+
+            if existing_budget:
+                existing_budget.amount = budget_amount
+            else:
+                new_budget = Budget(
+                    month=current_month,
+                    amount=budget_amount,
+                    user_id=current_user.id
+                )
+                db.session.add(new_budget)
+
+            db.session.commit()
+            flash('Budget set successfully!', 'success')
+            return redirect(url_for('expense'))
+
+        # GET request - show the budget setup form
+        return render_template('budget_setup.html')
+
+    except Exception as e:
+        logger.error(f"Error in budget_setup: {str(e)}", exc_info=True)
+        db.session.rollback()
+        flash('An error occurred while setting up your budget. Please try again.', 'error')
+        return redirect(url_for('budget_setup'))
 
 # Initialize the application
 init_db()
