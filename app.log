@@ -34,3 +34,55 @@
  * Running on http://127.0.0.1:10000
  * Running on http://192.168.0.100:10000
 2025-03-01 14:36:28,454 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-03-01 19:35:50,136 - app - INFO - Database tables found: ['budget', 'expense', 'user']
+2025-03-01 19:35:50,161 - app - INFO - Total users in database: 0
+2025-03-01 19:35:50,446 - app - INFO - Database write test successful
+2025-03-01 19:35:50,447 - __main__ - INFO - Database verification successful
+2025-03-01 19:35:50,482 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:10000
+ * Running on http://192.168.0.100:10000
+2025-03-01 19:35:50,482 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-03-01 19:39:05,036 - app - INFO - Database tables found: ['budget', 'expense', 'user']
+2025-03-01 19:39:05,055 - app - INFO - Total users in database: 0
+2025-03-01 19:39:05,394 - app - INFO - Database write test successful
+2025-03-01 19:39:05,394 - __main__ - INFO - Database verification successful
+2025-03-01 19:39:05,433 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:10000
+ * Running on http://192.168.0.100:10000
+2025-03-01 19:39:05,433 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-03-01 19:39:22,921 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:39:22] "[32mGET / HTTP/1.1[0m" 302 -
+2025-03-01 19:39:22,981 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:39:22] "GET /login?next=/ HTTP/1.1" 200 -
+2025-03-01 19:39:23,515 - __main__ - ERROR - 404 error: http://127.0.0.1:10000/favicon.ico
+2025-03-01 19:39:23,520 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:39:23] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-03-01 19:39:34,527 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:39:34] "GET /register HTTP/1.1" 200 -
+2025-03-01 19:39:54,471 - __main__ - INFO - New user registered: rookiemag79
+2025-03-01 19:39:54,472 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:39:54] "[32mPOST /register HTTP/1.1[0m" 302 -
+2025-03-01 19:39:54,491 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:39:54] "GET /budget_setup HTTP/1.1" 200 -
+2025-03-01 19:40:04,014 - app - DEBUG - Received month: 2025-03, budget_amount: 10000
+2025-03-01 19:40:04,023 - __main__ - INFO - Created new budget for 2025-03: 10000.0
+2025-03-01 19:40:04,037 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "[32mPOST /budget_setup HTTP/1.1[0m" 302 -
+2025-03-01 19:40:04,050 - app - DEBUG - Categories: ['Auto', 'Online Food', 'College Mess', 'Instamart', 'Miscellaneous']
+2025-03-01 19:40:04,068 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "GET /expense HTTP/1.1" 200 -
+2025-03-01 19:40:04,264 - __main__ - DEBUG - Retrieved expenses for period 2025-03-01 to 2025-03-01
+2025-03-01 19:40:04,266 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "GET /api/expenses?start_date=2025-03-01&end_date=2025-03-01 HTTP/1.1" 200 -
+2025-03-01 19:40:04,269 - __main__ - DEBUG - Retrieved budget for 2025-03
+2025-03-01 19:40:04,273 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "GET /api/budget?month=2025-03 HTTP/1.1" 200 -
+2025-03-01 19:40:04,319 - __main__ - DEBUG - Retrieved budget for 2025-03
+2025-03-01 19:40:04,323 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "GET /api/budget?month=2025-03 HTTP/1.1" 200 -
+2025-03-01 19:40:04,325 - __main__ - DEBUG - Retrieved expenses for period 2025-03-01 to 2025-03-31
+2025-03-01 19:40:04,332 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "GET /api/expenses?start_date=2025-03-01&end_date=2025-03-31 HTTP/1.1" 200 -
+2025-03-01 19:40:04,348 - __main__ - DEBUG - Retrieved expenses for period 2025-03-01 to 2025-03-31
+2025-03-01 19:40:04,350 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:04] "GET /api/expenses?start_date=2025-03-01&end_date=2025-03-31 HTTP/1.1" 200 -
+2025-03-01 19:40:08,588 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:08] "GET /calendar HTTP/1.1" 200 -
+2025-03-01 19:40:09,017 - werkzeug - INFO - 127.0.0.1 - - [01/Mar/2025 19:40:09] "[31m[1mGET /api/calendar_events?start=2025-02-23T00:00:00+05:30&end=2025-04-06T00:00:00+05:30 HTTP/1.1[0m" 400 -
+2025-03-01 19:41:55,506 - app - INFO - Database tables found: ['budget', 'expense', 'user']
+2025-03-01 19:41:55,529 - app - INFO - Total users in database: 1
+2025-03-01 19:41:55,776 - app - INFO - Database write test successful
+2025-03-01 19:41:55,776 - __main__ - INFO - Database verification successful
+2025-03-01 19:41:55,803 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:10000
+ * Running on http://192.168.0.100:10000
+2025-03-01 19:41:55,804 - werkzeug - INFO - [33mPress CTRL+C to quit[0m

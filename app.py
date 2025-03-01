@@ -37,7 +37,7 @@ csrf = CSRFProtect(app)
 
 # Update the app configuration
 app.config.update(
-    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///finance.db').replace("postgres://", "postgresql://", 1),
+    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///instance/finance.db').replace("postgres://", "postgresql://", 1),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
     SESSION_COOKIE_SECURE=False if app.debug else True,  # True in production
@@ -723,10 +723,20 @@ def get_calendar_events():
             return jsonify({"error": "Both start and end parameters are required"}), 400
             
         try:
-            start = datetime.fromisoformat(start_date.replace('Z', '+00:00')).date()
-            end = datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
-        except ValueError:
-            return jsonify({"error": "Invalid date format"}), 400
+            # Handle different date formats that might come from FullCalendar
+            # Remove timezone info if present
+            if 'T' in start_date:
+                start_date = start_date.split('T')[0]
+            if 'T' in end_date:
+                end_date = end_date.split('T')[0]
+                
+            start = datetime.strptime(start_date, '%Y-%m-%d').date()
+            end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            logger.debug(f"Parsed date range: {start} to {end}")
+        except ValueError as e:
+            logger.error(f"Date parsing error: {str(e)}, start_date={start_date}, end_date={end_date}")
+            return jsonify({"error": f"Invalid date format: {str(e)}"}), 400
             
         expenses = Expense.query.filter(
             Expense.user_id == current_user.id,
