@@ -246,7 +246,6 @@
             const modalDate = document.getElementById('modalDate');
             const modalContent = document.getElementById('modalContent');
             
-            // Format the date for display
             modalDate.textContent = new Date(date).toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
@@ -262,15 +261,26 @@
                 // Group expenses by category
                 expenses.forEach(expense => {
                     if (expense.category) {
-                        expenseData[expense.category] = expense.amount;
-                        total += parseFloat(expense.amount);
+                        // Make sure we're working with numbers
+                        const amount = parseFloat(expense.amount);
+                        if (!isNaN(amount)) {
+                            if (expenseData[expense.category]) {
+                                expenseData[expense.category] += amount;
+                            } else {
+                                expenseData[expense.category] = amount;
+                            }
+                            total += amount;
+                        }
                     }
                 });
             } else {
                 // Object format from expenses API
                 expenseData = expenses;
                 for (const amount of Object.values(expenseData)) {
-                    total += parseFloat(amount);
+                    const numAmount = parseFloat(amount);
+                    if (!isNaN(numAmount)) {
+                        total += numAmount;
+                    }
                 }
             }
             
@@ -282,12 +292,13 @@
             
             if (hasExpenses) {
                 for (const [category, amount] of Object.entries(expenseData)) {
+                    const numAmount = parseFloat(amount);
                     content += `<tr>
                         <td>${category}</td>
-                        <td class="amount">₹${parseFloat(amount).toLocaleString('en-IN', {
+                        <td class="amount">₹${!isNaN(numAmount) ? numAmount.toLocaleString('en-IN', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
-                        })}</td>
+                        }) : '0.00'}</td>
                     </tr>`;
                 }
             } else {
