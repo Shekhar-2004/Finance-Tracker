@@ -61,7 +61,7 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return Session.get(User, int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Database Models
 class User(db.Model, UserMixin):
