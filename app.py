@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_login import UserMixin, LoginManager, login_required, current_user, login_user, logout_user
@@ -20,11 +20,11 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # Database Models
-class User(UserMixin, db.Model):
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
     
     # Relationships
     budgets = db.relationship('Budget', backref='user', lazy=True)
@@ -78,47 +78,58 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-        
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        email = request.form.get('email')
-        
-        # Validate input
-        if not username or not password or not email:
-            return render_template('register.html', error="All fields are required")
-        
-        if password != confirm_password:
-            return render_template('register.html', error="Passwords do not match")
-            
-        if len(password) < 6:
-            return render_template('register.html', error="Password must be at least 6 characters long")
-            
-        # Check if username or email already exists
-        if User.query.filter_by(username=username).first():
-            return render_template('register.html', error="Username already exists")
-        
-        if User.query.filter_by(email=email).first():
-            return render_template('register.html', error="Email already registered")
-        
         try:
+            # Get form data
+            username = request.form.get('username')
+            email = request.form.get('email')
+            password = request.form.get('password')
+            confirm_password = request.form.get('confirm_password')
+
+            # Validate form data
+            if not username or not email or not password:
+                flash('All fields are required')
+                return render_template('register.html', error='All fields are required')
+
+            if password != confirm_password:
+                flash('Passwords do not match')
+                return render_template('register.html', error='Passwords do not match')
+
+            # Check if username or email already exists
+            existing_user = User.query.filter(
+                (User.username == username) | (User.email == email)
+            ).first()
+            
+            if existing_user:
+                if existing_user.username == username:
+                    return render_template('register.html', error='Username already exists')
+                else:
+                    return render_template('register.html', error='Email already registered')
+
             # Create new user
-            user = User(username=username, email=email)
-            user.set_password(password)
-            db.session.add(user)
+            new_user = User(
+                username=username,
+                email=email,
+                password_hash=generate_password_hash(password)
+            )
+
+            # Add to database
+            db.session.add(new_user)
             db.session.commit()
+
+            # Log in the new user
+            login_user(new_user)
             
-            # Log the user in
-            login_user(user)
+            # Redirect to home page
             return redirect(url_for('index'))
-            
+
         except Exception as e:
+            # Roll back the session in case of error
             db.session.rollback()
-            return render_template('register.html', error="An error occurred. Please try again.")
-    
+            print(f"Registration error: {str(e)}")  # For debugging
+            return render_template('register.html', error='An error occurred during registration. Please try again.')
+
+    # GET request - show registration form
     return render_template('register.html')
 
 @app.route('/logout')
