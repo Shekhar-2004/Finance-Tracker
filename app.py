@@ -74,7 +74,21 @@ def log_user_state():
     if current_user.is_authenticated:
         logger.debug(f"Current user: {current_user.username}")
 
-# Enhanced database initialization
+# Add this function before init_db()
+def recreate_tables():
+    """Drop all tables and recreate them"""
+    try:
+        with app.app_context():
+            logger.info("Dropping all tables...")
+            db.drop_all()
+            logger.info("Creating all tables...")
+            db.create_all()
+            logger.info("Tables recreated successfully")
+    except Exception as e:
+        logger.error(f"Failed to recreate tables: {str(e)}", exc_info=True)
+        raise
+
+# Update the init_db function
 def init_db():
     """Initialize database with proper error handling"""
     try:
@@ -84,18 +98,21 @@ def init_db():
             existing_tables = inspector.get_table_names()
             logger.info(f"Existing tables: {existing_tables}")
             
-            # Create tables if they don't exist
-            db.create_all()
-            logger.info("Database initialization completed successfully")
-            
-            # Verify all required tables are created
+            # Define required tables
             required_tables = {'user', 'budget', 'expense'}
-            actual_tables = set(inspector.get_table_names())
+            actual_tables = set(existing_tables)
             missing_tables = required_tables - actual_tables
             
             if missing_tables:
-                logger.error(f"Missing tables: {missing_tables}")
-                raise Exception(f"Failed to create tables: {missing_tables}")
+                logger.warning(f"Missing tables detected: {missing_tables}")
+                logger.info("Attempting to recreate all tables...")
+                recreate_tables()
+                
+                # Verify tables after recreation
+                inspector = db.inspect(db.engine)
+                existing_tables = inspector.get_table_names()
+                if not required_tables.issubset(set(existing_tables)):
+                    raise Exception(f"Failed to create required tables. Current tables: {existing_tables}")
             
             logger.info("All required tables are present")
             
@@ -105,6 +122,9 @@ def init_db():
 
 # Database Models (reorder the models)
 class User(db.Model, UserMixin):
+    """User model for authentication"""
+    __tablename__ = 'user'  # Explicitly set table name
+    
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
@@ -141,6 +161,8 @@ class User(db.Model, UserMixin):
 
 class Budget(db.Model):
     """Budget model for storing monthly budgets"""
+    __tablename__ = 'budget'  # Explicitly set table name
+    
     id = db.Column(db.Integer, primary_key=True)
     month = db.Column(db.String(7), nullable=False)
     amount = db.Column(db.Float, nullable=False)
@@ -156,6 +178,8 @@ class Budget(db.Model):
 
 class Expense(db.Model):
     """Expense model for storing daily expenses"""
+    __tablename__ = 'expense'  # Explicitly set table name
+    
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, nullable=False)
     category = db.Column(db.String(50), nullable=False)
@@ -502,9 +526,13 @@ init_db()
 # Application startup
 if __name__ == '__main__':
     try:
-        # Use the PORT environment variable that Render provides
-        port = int(os.environ.get('PORT', 10000))
-        app.run(host='0.0.0.0', port=port)
+        with app.app_context():
+            # Initialize database
+            init_db()
+            
+            # Start the application
+            port = int(os.environ.get('PORT', 10000))
+            app.run(host='0.0.0.0', port=port)
     except Exception as e:
-        logger.error(f"Failed to start application: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Failed to start application: {str(e)}", exc_info=True)
         raise
