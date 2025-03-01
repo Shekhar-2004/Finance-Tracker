@@ -35,9 +35,16 @@ logger = logging.getLogger(__name__)
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 
+# Get database URL from environment or use SQLite as fallback
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///instance/finance.db')
+
+# Ensure PostgreSQL URLs use the correct format for SQLAlchemy
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
 # Update the app configuration
 app.config.update(
-    SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///instance/finance.db').replace("postgres://", "postgresql://", 1),
+    SQLALCHEMY_DATABASE_URI=database_url,
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
     SESSION_COOKIE_SECURE=False if app.debug else True,  # True in production

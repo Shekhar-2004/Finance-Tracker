@@ -9,3 +9,5 @@ SQLAlchemy>=2.0,<3.0
 alembic>=1.12,<2.0
 python-dotenv>=1.0,<2.0
 email_validator>=2.0.0
+psycopg2-binary>=2.9.9,<3.0.0
+gunicorn>=21.2.0

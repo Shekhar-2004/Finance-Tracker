@@ -2,25 +2,21 @@ services:
   - type: web
     name: finance-tracker
     env: python
-    buildCommand: |
-      pip install -r requirements.txt
-      python db_init.py
-    startCommand: gunicorn app:app --config gunicorn_config.py
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: PORT
-        fromService:
-          type: web
-          property: port
       - key: SECRET_KEY
         generateValue: true
+      - key: FLASK_DEBUG
+        value: false
       - key: DATABASE_URL
         fromDatabase:
-          name: finance_db
+          name: finance-tracker-db
           property: connectionString
 
 databases:
-  - name: finance_db
+  - name: finance-tracker-db
     databaseName: finance_tracker
-    ipAllowList: [] 
+    plan: free 
