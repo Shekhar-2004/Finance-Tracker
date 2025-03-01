@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Daily Expenses</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -583,7 +584,10 @@
             try {
                 const response = await fetch('/add_expense', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+                    },
                     body: JSON.stringify(data)
                 });
 
@@ -635,7 +639,8 @@
                 const response = await fetch('/api/update_budget', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                     },
                     body: JSON.stringify({
                         budget: parseFloat(newBudget)

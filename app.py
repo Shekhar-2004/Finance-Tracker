@@ -449,8 +449,14 @@ def get_expenses():
     end_date = request.args.get('end')
     
     if start_date and end_date:
-        start = datetime.strptime(start_date, '%Y-%m-%d').date()
-        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        # Parse ISO format dates
+        try:
+            start = datetime.fromisoformat(start_date.replace('Z', '+00:00')).date()
+            end = datetime.fromisoformat(end_date.replace('Z', '+00:00')).date()
+        except ValueError:
+            # Fallback to simple date format if ISO parsing fails
+            start = datetime.strptime(start_date.split('T')[0], '%Y-%m-%d').date()
+            end = datetime.strptime(end_date.split('T')[0], '%Y-%m-%d').date()
         
         expenses = Expense.query.filter(
             Expense.date >= start,
@@ -473,7 +479,12 @@ def get_expenses():
     
     date_str = request.args.get('date')
     if date_str:
-        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            # Handle potential ISO format
+            date = datetime.fromisoformat(date_str.split('T')[0]).date()
+            
         expenses = Expense.query.filter_by(
             date=date,
             user_id=current_user.id
