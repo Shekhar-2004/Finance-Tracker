@@ -12,6 +12,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from urllib.parse import urlparse
 from decimal import Decimal, InvalidOperation
+from sqlalchemy import inspect
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SubmitField
+from wtforms.validators import DataRequired, Email, Length
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -127,16 +131,23 @@ class Expense(db.Model):
     def __repr__(self):
         return f'<Expense {self.date} {self.category}: {self.amount}>'
 
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    remember_me = BooleanField('Remember Me')
+    submit = SubmitField('Sign In')
+
 def verify_database():
     """Verify database integrity and connectivity"""
     try:
         # Check if tables exist
-        tables = db.engine.table_names()
-        logger.info(f"Database tables found: {tables}")
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
+        app.logger.info(f"Database tables found: {tables}")
         
         # Count users
         user_count = User.query.count()
-        logger.info(f"Total users in database: {user_count}")
+        app.logger.info(f"Total users in database: {user_count}")
         
         # Test write capability
         test_user = User(
@@ -148,12 +159,12 @@ def verify_database():
         db.session.commit()
         db.session.delete(test_user)
         db.session.commit()
-        logger.info("Database write test successful")
+        app.logger.info("Database write test successful")
         
         return True
     except Exception as e:
-        logger.error(f"Database verification failed: {str(e)}")
-        logger.error(traceback.format_exc())
+        app.logger.error(f"Database verification failed: {str(e)}")
+        app.logger.error(traceback.format_exc())
         return False
 
 @app.before_request
@@ -230,18 +241,13 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for('expense'))
     
-    if request.method == 'POST':
+    form = LoginForm()
+    if form.validate_on_submit():
         try:
-            username = request.form.get('username')
-            password = request.form.get('password')
-            remember = bool(request.form.get('remember'))
-            
-            user = User.query.filter_by(username=username).first()
-            logger.debug(f"Login attempt for user: {username}")
-            
-            if user and user.check_password(password):
-                login_user(user, remember=remember)
-                logger.info(f"User logged in successfully: {username}")
+            user = User.query.filter_by(username=form.username.data).first()
+            if user and user.check_password(form.password.data):
+                login_user(user, remember=form.remember_me.data)
+                app.logger.info(f"User logged in successfully: {user.username}")
                 
                 next_page = request.args.get('next')
                 if not next_page or urlparse(next_page).netloc != '':
@@ -249,14 +255,13 @@ def login():
                 return redirect(next_page)
             else:
                 flash('Invalid username or password', 'error')
-                logger.warning(f"Failed login attempt for user: {username}")
-                
+                app.logger.warning(f"Failed login attempt for user: {form.username.data}")
         except Exception as e:
             flash('Login failed. Please try again.', 'error')
-            logger.error(f"Login error: {str(e)}")
-            logger.error(traceback.format_exc())
+            app.logger.error(f"Login error: {str(e)}")
+            app.logger.error(traceback.format_exc())
     
-    return render_template('login.html')
+    return render_template('login.html', form=form)
 
 @app.route('/logout')
 @login_required
