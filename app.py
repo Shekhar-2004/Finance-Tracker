@@ -21,13 +21,13 @@ from sqlalchemy.orm import Session
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app)
 
-# Enhanced logging configuration
+# Initialize logging
 logging.basicConfig(
     level=logging.DEBUG if app.debug else logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('app.log')
+        logging.FileHandler('app.log') if os.environ.get('FLASK_DEBUG', 'False').lower() == 'true' else logging.NullHandler()
     ]
 )
 logger = logging.getLogger(__name__)
@@ -36,11 +36,28 @@ logger = logging.getLogger(__name__)
 csrf = CSRFProtect(app)
 
 # Get database URL from environment or use SQLite as fallback
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///instance/finance.db')
+database_url = os.environ.get('DATABASE_URL')
+
+# In production, ensure DATABASE_URL is set
+if not database_url and os.environ.get('FLASK_DEBUG', 'False').lower() != 'true':
+    logger.error("DATABASE_URL environment variable is not set in production mode")
+    # Use a temporary in-memory SQLite database as a last resort
+    database_url = 'sqlite:///:memory:'
+elif not database_url:
+    # In development, use SQLite file
+    database_url = 'sqlite:///instance/finance.db'
+    # Ensure the instance directory exists
+    os.makedirs('instance', exist_ok=True)
 
 # Ensure PostgreSQL URLs use the correct format for SQLAlchemy
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+# Log the database URL (with credentials masked)
+masked_url = database_url
+if '@' in masked_url:
+    masked_url = masked_url.split('@')[0].split('://')[0] + '://*****:*****@' + masked_url.split('@')[1]
+logger.info(f"Using database: {masked_url}")
 
 # Update the app configuration
 app.config.update(
@@ -152,17 +169,24 @@ def verify_database():
         user_count = User.query.count()
         app.logger.info(f"Total users in database: {user_count}")
         
-        # Test write capability
-        test_user = User(
-            username="test_verify_db",
-            email="test_verify_db@test.com"
-        )
-        test_user.set_password("test123")
-        db.session.add(test_user)
-        db.session.commit()
-        db.session.delete(test_user)
-        db.session.commit()
-        app.logger.info("Database write test successful")
+        # Only perform write test in development mode
+        if os.environ.get('FLASK_DEBUG', 'False').lower() == 'true':
+            # Test write capability
+            test_user = User(
+                username="test_verify_db",
+                email="test_verify_db@test.com"
+            )
+            test_user.set_password("test123")
+            db.session.add(test_user)
+            db.session.commit()
+            db.session.delete(test_user)
+            db.session.commit()
+            app.logger.info("Database write test successful")
+        else:
+            # In production, just check if we can start a transaction
+            with db.engine.begin() as conn:
+                conn.execute(db.text("SELECT 1"))
+            app.logger.info("Database connection test successful")
         
         return True
     except Exception as e:
@@ -791,16 +815,30 @@ def get_calendar_events():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
+    # Create all database tables
     with app.app_context():
-        # Create all database tables
-        db.create_all()
-        
-        # Verify database setup
-        if verify_database():
-            logger.info("Database verification successful")
-        else:
-            logger.error("Database verification failed")
-        
-        # Start the application
-        port = int(os.environ.get("PORT", 10000))
-        app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true')
+        try:
+            db.create_all()
+            logger.info("Database tables created successfully")
+            
+            # Verify database setup
+            if verify_database():
+                logger.info("Database verification successful")
+            else:
+                logger.error("Database verification failed")
+        except Exception as e:
+            logger.error(f"Database initialization error: {str(e)}")
+            logger.error(traceback.format_exc())
+    
+    # Start the application
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true')
+else:
+    # When running with gunicorn, initialize the database
+    with app.app_context():
+        try:
+            db.create_all()
+            logger.info("Database tables created successfully in production mode")
+        except Exception as e:
+            logger.error(f"Database initialization error in production mode: {str(e)}")
+            logger.error(traceback.format_exc())
