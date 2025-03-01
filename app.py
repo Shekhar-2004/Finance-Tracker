@@ -5,22 +5,51 @@ from flask_login import UserMixin, LoginManager, login_required, current_user, l
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 import os
+import sys
+import traceback
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Enhanced logging configuration
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app with configurations
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///finance.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+app.wsgi_app = ProxyFix(app.wsgi_app)  # Add support for proxy headers
 
-# Initialize extensions
-db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+# Database configuration with error handling
+def get_database_url():
+    db_url = os.environ.get('DATABASE_URL')
+    if db_url and db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    return db_url or 'sqlite:///finance.db'
+
+app.config.update(
+    SQLALCHEMY_DATABASE_URI=get_database_url(),
+    SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7)
+)
+
+# Initialize extensions with error handling
+try:
+    db = SQLAlchemy(app)
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'login'
+    logger.info("Successfully initialized database and login manager")
+except Exception as e:
+    logger.error(f"Failed to initialize extensions: {str(e)}")
+    raise
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -57,61 +86,63 @@ class Expense(db.Model):
     amount = db.Column(db.Float)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-# Create tables
-def init_db():
-    with app.app_context():
-        db.create_all()
+# Error handlers
+@app.errorhandler(404)
+def not_found_error(error):
+    logger.error(f"404 error: {error}")
+    return render_template('error.html', error="Page not found"), 404
 
-# Initialize database
-init_db()
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    logger.error(f"500 error: {error}\n{traceback.format_exc()}")
+    return render_template('error.html', error="Internal server error"), 500
 
-# Authentication routes
+# Modified register route with enhanced error handling
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    logger.debug("Register route accessed")
+    
     if current_user.is_authenticated:
+        logger.debug("Authenticated user attempting to access register page")
         return redirect(url_for('index'))
 
     if request.method == 'POST':
+        logger.debug(f"Registration attempt with data: {request.form}")
         try:
             username = request.form.get('username')
             email = request.form.get('email')
             password = request.form.get('password')
             confirm_password = request.form.get('confirm_password')
 
+            # Validate input
             if not all([username, email, password, confirm_password]):
-                flash('All fields are required')
+                logger.warning("Incomplete registration form submitted")
                 return render_template('register.html', error='All fields are required')
 
             if password != confirm_password:
-                flash('Passwords do not match')
+                logger.warning("Password mismatch in registration")
                 return render_template('register.html', error='Passwords do not match')
 
-            if len(password) < 6:
-                flash('Password must be at least 6 characters long')
-                return render_template('register.html', error='Password must be at least 6 characters long')
-
-            if User.query.filter_by(username=username).first():
-                flash('Username already exists')
-                return render_template('register.html', error='Username already exists')
-
-            if User.query.filter_by(email=email).first():
-                flash('Email already registered')
-                return render_template('register.html', error='Email already registered')
-
-            new_user = User(username=username, email=email)
-            new_user.set_password(password)
-
-            db.session.add(new_user)
-            db.session.commit()
-
-            login_user(new_user)
-            flash('Registration successful!')
-            return redirect(url_for('index'))
+            # Create new user with error handling
+            try:
+                new_user = User(username=username, email=email)
+                new_user.set_password(password)
+                db.session.add(new_user)
+                db.session.commit()
+                logger.info(f"Successfully created new user: {username}")
+                
+                login_user(new_user)
+                return redirect(url_for('index'))
+            
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Database error during user creation: {str(e)}\n{traceback.format_exc()}")
+                return render_template('register.html', error='Database error occurred. Please try again.')
 
         except Exception as e:
-            db.session.rollback()
-            logger.error(f"Registration error: {str(e)}", exc_info=True)
-            return render_template('register.html', error='An error occurred during registration. Please try again.')
+            logger.error(f"Unexpected error in registration: {str(e)}\n{traceback.format_exc()}")
+            return render_template('register.html', error='An unexpected error occurred. Please try again.')
 
     return render_template('register.html')
 
@@ -278,8 +309,27 @@ def update_budget():
         db.session.rollback()
         return jsonify({'message': str(e)}), 500
 
-# Add this at the end of the file
+# Create error.html template
+@app.route('/error')
+def error():
+    return render_template('error.html')
+
+# Database initialization with error handling
+def init_db():
+    try:
+        with app.app_context():
+            db.create_all()
+            logger.info("Successfully initialized database tables")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {str(e)}\n{traceback.format_exc()}")
+        raise
+
+# Application startup
 if __name__ == '__main__':
-    # Get port from environment variable or default to 10000
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get('PORT', 10000))
+        init_db()
+        app.run(host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Failed to start application: {str(e)}\n{traceback.format_exc()}")
+        raise
