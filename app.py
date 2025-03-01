@@ -455,7 +455,14 @@ def update_budget():
         data = request.get_json()
         new_budget = data.get('budget')
         
-        if new_budget is None or new_budget <= 0:
+        if new_budget is None:
+            return jsonify({'message': 'Budget amount is required'}), 400
+            
+        try:
+            new_budget = float(new_budget)
+            if new_budget <= 0:
+                return jsonify({'message': 'Budget amount must be greater than 0'}), 400
+        except (TypeError, ValueError):
             return jsonify({'message': 'Invalid budget amount'}), 400
             
         current_month = datetime.now().strftime('%Y-%m')
@@ -475,18 +482,23 @@ def update_budget():
             db.session.add(budget)
             
         db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Budget updated successfully'})
+        logger.info(f"Budget updated successfully for user {current_user.id}")
+        return jsonify({
+            'status': 'success',
+            'message': 'Budget updated successfully',
+            'amount': new_budget
+        })
         
     except Exception as e:
+        logger.error(f"Error updating budget: {str(e)}", exc_info=True)
         db.session.rollback()
-        return jsonify({'message': str(e)}), 500
+        return jsonify({'message': 'An error occurred while updating the budget'}), 500
 
 # Create error.html template
 @app.route('/error')
 def error():
     return render_template('error.html')
 
-@app.route('/', methods=['GET', 'POST'])
 @app.route('/budget_setup', methods=['GET', 'POST'])
 @login_required
 def budget_setup():
@@ -499,16 +511,21 @@ def budget_setup():
             logger.debug("Processing budget setup POST request")
             
             try:
+                # Get and validate budget amount
                 budget_amount = request.form.get('budget')
-                logger.debug(f"Received budget amount: {budget_amount}")
+                if not budget_amount:
+                    raise ValueError("Budget amount is required")
                 
-                # Validate budget amount
-                budget_amount = validate_budget(budget_amount)
+                budget_amount = float(budget_amount)
+                if budget_amount <= 0:
+                    raise ValueError("Budget amount must be greater than 0")
+                
+                logger.debug(f"Received budget amount: {budget_amount}")
                 
                 # Get current month in YYYY-MM format
                 current_month = datetime.now().strftime('%Y-%m')
                 
-                # Check if budget already exists for this month
+                # Check if budget already exists for this month and user
                 existing_budget = Budget.query.filter_by(
                     user_id=current_user.id,
                     month=current_month
