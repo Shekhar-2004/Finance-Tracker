@@ -16,6 +16,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, ValidationError
 from sqlalchemy.orm import Session
+from pathlib import Path
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -35,42 +36,29 @@ logger = logging.getLogger(__name__)
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 
-# Get database URL from environment or use SQLite as fallback
-database_url = os.environ.get('DATABASE_URL')
-
-# In production, ensure DATABASE_URL is set
-if not database_url and os.environ.get('FLASK_DEBUG', 'False').lower() != 'true':
-    logger.error("DATABASE_URL environment variable is not set in production mode")
-    # Use a temporary in-memory SQLite database as a last resort
-    database_url = 'sqlite:///:memory:'
-elif not database_url:
-    # In development, use SQLite file
-    database_url = 'sqlite:///instance/finance.db'
-    # Ensure the instance directory exists
-    os.makedirs('instance', exist_ok=True)
-
-# Ensure PostgreSQL URLs use the correct format for SQLAlchemy
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-
-# Log the database URL (with credentials masked)
-masked_url = database_url
-if '@' in masked_url:
-    masked_url = masked_url.split('@')[0].split('://')[0] + '://*****:*****@' + masked_url.split('@')[1]
-logger.info(f"Using database: {masked_url}")
-
-# Log database type for debugging
-if database_url.startswith('sqlite'):
-    logger.warning("Using SQLite database - data may not persist in production environment")
-elif database_url.startswith('postgresql'):
-    logger.info("Using PostgreSQL database - data should persist between restarts")
+# Database configuration
+if os.environ.get('FLASK_ENV') == 'production':
+    # Render (PostgreSQL)
+    database_url = os.environ.get('DATABASE_URL', '')
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    logger.info("Using PostgreSQL database in production mode")
 else:
-    logger.warning(f"Using unknown database type: {database_url.split('://')[0]}")
+    # Local (SQLite)
+    # Create instance directory if it doesn't exist
+    instance_path = Path(app.instance_path)
+    instance_path.mkdir(exist_ok=True)
+    
+    # Set SQLite database path
+    sqlite_path = instance_path / 'finance.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{sqlite_path}'
+    logger.info(f"Using SQLite database at {sqlite_path} in development mode")
+
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Update the app configuration
 app.config.update(
-    SQLALCHEMY_DATABASE_URI=database_url,
-    SQLALCHEMY_TRACK_MODIFICATIONS=False,
     SECRET_KEY=os.environ.get('SECRET_KEY', 'dev-key-change-this'),
     SESSION_COOKIE_SECURE=False if app.debug else True,  # True in production
     SESSION_COOKIE_HTTPONLY=True,
@@ -895,10 +883,15 @@ if __name__ == '__main__':
             logger.error(traceback.format_exc())
     
     # Start the application
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true')
+    if os.environ.get('FLASK_ENV') == 'production':
+        # Render (bind to port 10000)
+        port = int(os.environ.get('PORT', 10000))
+        app.run(host='0.0.0.0', port=port)
+    else:
+        # Local (default port 5000)
+        app.run(debug=True)
 else:
-    # When running with gunicorn, initialize the database
+    # When running with gunicorn or other WSGI server, initialize the database
     with app.app_context():
         try:
             # Check if database is PostgreSQL

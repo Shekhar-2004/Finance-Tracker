@@ -11,18 +11,30 @@ A web application for tracking personal finances, including expenses, budgets, a
 - Monthly summary with charts
 - Responsive design
 
-## Local Development Setup
-
-1. Clone the repository
-2. Install dependencies:
-   ```
+## Local Development
+1. Install dependencies:
+   ```bash
    pip install -r requirements.txt
    ```
-3. Run the application:
+2. Create a `.env` file:
+   ```plaintext
+   FLASK_ENV=development
+   SECRET_KEY=your-secret-key
    ```
+3. Run the app:
+   ```bash
    python app.py
    ```
-4. Access the application at http://localhost:5000
+4. Access at: `http://localhost:5000`
+
+## Render Deployment
+1. Set environment variables in Render:
+   ```plaintext
+   FLASK_ENV=production
+   DATABASE_URL=your-postgres-url
+   SECRET_KEY=your-secret-key
+   ```
+2. Push changes to GitHub to trigger deployment.
 
 ## Database Configuration
 
@@ -30,16 +42,6 @@ The application supports both SQLite (development) and PostgreSQL (production):
 
 - For local development, SQLite is used by default
 - For production, set the `DATABASE_URL` environment variable to your PostgreSQL connection string
-
-## Deployment to Render
-
-This application is configured for deployment on Render:
-
-1. Push your code to a Git repository
-2. In Render dashboard, create a new Web Service
-3. Connect to your repository
-4. Render will automatically detect the configuration from `render.yaml`
-5. The application will be deployed with a PostgreSQL database
 
 ## Environment Variables
 
