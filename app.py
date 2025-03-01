@@ -10,7 +10,7 @@ import traceback
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from urllib.parse import urlparse
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from decimal import Decimal, InvalidOperation
 
 # Enhanced logging configuration
@@ -30,7 +30,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app)  # Add support for proxy headers
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 
-# Add these configurations
+# Update the app configuration
 app.config.update(
     SQLALCHEMY_DATABASE_URI=os.environ.get('DATABASE_URL', 'sqlite:///finance.db'),
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
@@ -41,7 +41,8 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),
     WTF_CSRF_ENABLED=True,
     WTF_CSRF_TIME_LIMIT=3600,  # 1 hour
-    WTF_CSRF_SSL_STRICT=True
+    WTF_CSRF_SSL_STRICT=True,
+    WTF_CSRF_SECRET_KEY=os.environ.get('WTF_CSRF_SECRET_KEY', 'csrf-key-change-this')
 )
 
 # Initialize extensions with error handling
@@ -225,115 +226,103 @@ def internal_error(error):
     db.session.rollback()
     return render_template('error.html', error="Internal server error"), 500
 
+# Add CSRF error handler
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    logger.error(f"CSRF error occurred: {str(e)}")
+    flash('The form expired. Please try again.', 'error')
+    return redirect(url_for('login'))
+
 # Enhanced registration route
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     try:
-        logger.debug("=== Starting Registration Process ===")
-        debug_request(request)
-        log_user_state()
-
         if current_user.is_authenticated:
-            logger.debug("Authenticated user attempting to register - redirecting to index")
-            return redirect(url_for('index'))
+            return redirect(url_for('expense'))
 
         if request.method == 'POST':
-            logger.debug("Processing registration POST request")
-            
             try:
-                # Get and validate form data
                 username = User.validate_username(request.form.get('username', ''))
                 email = User.validate_email(request.form.get('email', ''))
                 password = request.form.get('password', '')
                 confirm_password = request.form.get('confirm_password', '')
 
-                logger.debug(f"Validated username: {username}, email: {email}")
-
-                # Check password match and length
                 if password != confirm_password:
                     raise ValueError("Passwords do not match")
                 
                 if len(password) < 6:
                     raise ValueError("Password must be at least 6 characters long")
 
-                # Check existing user
                 if User.query.filter_by(username=username).first():
                     raise ValueError("Username already exists")
                 
                 if User.query.filter_by(email=email).first():
                     raise ValueError("Email already registered")
 
-                # Create new user
                 new_user = User(username=username, email=email)
                 new_user.set_password(password)
                 
-                logger.debug("Adding new user to database")
                 db.session.add(new_user)
                 db.session.commit()
-                logger.info(f"Successfully created user: {username}")
 
-                # Log in the new user
                 login_user(new_user)
-                logger.debug(f"Logged in new user: {username}")
-                
                 flash('Registration successful! Welcome to Finance Tracker.', 'success')
-                return redirect(url_for('index'))
+                return redirect(url_for('budget_setup'))
 
             except ValueError as ve:
-                logger.warning(f"Validation error during registration: {str(ve)}")
-                return render_template('register.html', error=str(ve))
+                flash(str(ve), 'error')
+                return render_template('register.html')
                 
-            except IntegrityError as ie:
+            except Exception as e:
                 db.session.rollback()
-                logger.error(f"Database integrity error: {str(ie)}")
-                return render_template('register.html', 
-                    error="A user with that username or email already exists.")
-                
-            except SQLAlchemyError as se:
-                db.session.rollback()
-                logger.error(f"Database error: {str(se)}")
-                return render_template('register.html', 
-                    error="Database error occurred. Please try again.")
+                logger.error(f"Registration error: {str(e)}", exc_info=True)
+                flash('An error occurred during registration. Please try again.', 'error')
+                return render_template('register.html')
 
         return render_template('register.html')
 
     except Exception as e:
-        logger.error("Unexpected error in registration route", exc_info=True)
-        return render_template('error.html', 
-            error="An unexpected error occurred. Please try again later.")
+        logger.error(f"Unexpected registration error: {str(e)}", exc_info=True)
+        flash('An unexpected error occurred. Please try again later.', 'error')
+        return render_template('register.html')
 
 # Enhanced login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Handle user login"""
-    if current_user.is_authenticated:
-        return redirect(url_for('expense'))
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for('expense'))
 
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
+        if request.method == 'POST':
+            username = request.form.get('username')
+            password = request.form.get('password')
             
-            # Check if user has set up budget for current month
-            current_month = datetime.now().strftime('%Y-%m')
-            has_budget = Budget.query.filter_by(
-                user_id=user.id,
-                month=current_month
-            ).first()
+            user = User.query.filter_by(username=username).first()
             
-            next_page = request.args.get('next')
-            if not next_page or not next_page.startswith('/'):
-                next_page = url_for('budget_setup' if not has_budget else 'expense')
+            if user and user.check_password(password):
+                login_user(user)
+                
+                # Check if user has set up budget for current month
+                current_month = datetime.now().strftime('%Y-%m')
+                has_budget = Budget.query.filter_by(
+                    user_id=user.id,
+                    month=current_month
+                ).first()
+                
+                next_page = request.args.get('next')
+                if not next_page or not next_page.startswith('/'):
+                    next_page = url_for('budget_setup' if not has_budget else 'expense')
+                
+                return redirect(next_page)
             
-            return redirect(next_page)
+            flash('Invalid username or password', 'error')
         
-        flash('Invalid username or password', 'error')
-    
-    return render_template('login.html')
+        return render_template('login.html')
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}", exc_info=True)
+        flash('An error occurred. Please try again.', 'error')
+        return redirect(url_for('login'))
 
 # Enhanced logout route
 @app.route('/logout')
