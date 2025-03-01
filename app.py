@@ -1,8 +1,19 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+from flask import (
+    Flask, 
+    render_template, 
+    request, 
+    redirect, 
+    url_for, 
+    jsonify, 
+    flash,
+    session,
+    g
+)
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from flask_login import UserMixin, LoginManager, login_required, current_user, login_user, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf.csrf import CSRFProtect, CSRFError
 import logging
 import os
 import sys
@@ -10,22 +21,22 @@ import traceback
 from werkzeug.middleware.proxy_fix import ProxyFix
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from urllib.parse import urlparse
-from flask_wtf.csrf import CSRFProtect, CSRFError
 from decimal import Decimal, InvalidOperation
+
+# Initialize Flask app
+app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app)
 
 # Enhanced logging configuration
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.DEBUG if app.debug else logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('app.log')
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Initialize Flask app with configurations
-app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app)  # Add support for proxy headers
 
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
@@ -39,22 +50,21 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+    REMEMBER_COOKIE_SECURE=True,
+    REMEMBER_COOKIE_HTTPONLY=True,
+    REMEMBER_COOKIE_DURATION=timedelta(days=7),
     WTF_CSRF_ENABLED=True,
     WTF_CSRF_TIME_LIMIT=3600,  # 1 hour
     WTF_CSRF_SSL_STRICT=True,
     WTF_CSRF_SECRET_KEY=os.environ.get('WTF_CSRF_SECRET_KEY', 'csrf-key-change-this')
 )
 
-# Initialize extensions with error handling
-try:
-    db = SQLAlchemy(app)
-    login_manager = LoginManager()
-    login_manager.init_app(app)
-    login_manager.login_view = 'login'
-    logger.info("Successfully initialized database and login manager")
-except Exception as e:
-    logger.error(f"Failed to initialize extensions: {str(e)}")
-    raise
+# Initialize extensions
+db = SQLAlchemy(app)
+csrf = CSRFProtect(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -226,7 +236,6 @@ def internal_error(error):
     db.session.rollback()
     return render_template('error.html', error="Internal server error"), 500
 
-# Add CSRF error handler
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
     logger.error(f"CSRF error occurred: {str(e)}")
@@ -345,38 +354,93 @@ def logout():
 
 # Main routes
 @app.route('/')
-@login_required
 def index():
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
+    
     current_month = datetime.now().strftime('%Y-%m')
     budget = Budget.query.filter_by(
         month=current_month,
         user_id=current_user.id
     ).first()
-    return render_template('budget_setup.html', budget=budget)
+    
+    if not budget:
+        return redirect(url_for('budget_setup'))
+    return redirect(url_for('expense'))
 
 @app.route('/expense')
 @login_required
 def expense():
-    categories = ['Auto', 'Online Food', 'College Mess', 'Instamart', 'Miscellaneous']
-    return render_template('expense.html', categories=categories)
+    try:
+        current_month = datetime.now().strftime('%Y-%m')
+        budget = Budget.query.filter_by(
+            month=current_month,
+            user_id=current_user.id
+        ).first()
+        
+        if not budget:
+            flash('Please set up your monthly budget first.', 'warning')
+            return redirect(url_for('budget_setup'))
+            
+        categories = ['Auto', 'Online Food', 'College Mess', 'Instamart', 'Miscellaneous']
+        return render_template('expense.html', 
+                             categories=categories,
+                             budget=budget)
+    except Exception as e:
+        logger.error(f"Error in expense route: {str(e)}", exc_info=True)
+        flash('An error occurred while loading the expense page.', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/add_expense', methods=['POST'])
+@login_required
 def add_expense():
-    data = request.get_json()
-    date_str = data.get('date')
-    categories = data.get('categories')
-    date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    for category, amount in categories.items():
-        amount = float(amount)
-        expense = Expense.query.filter_by(date=date, category=category).first()
-        if expense:
-            expense.amount = amount
-        else:
-            if amount > 0:
-                expense = Expense(date=date, category=category, amount=amount)
-                db.session.add(expense)
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        date_str = data.get('date')
+        categories = data.get('categories')
+        
+        if not date_str or not categories:
+            return jsonify({'error': 'Missing required data'}), 400
+            
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format'}), 400
+            
+        for category, amount in categories.items():
+            try:
+                amount = float(amount)
+                expense = Expense.query.filter_by(
+                    date=date,
+                    category=category,
+                    user_id=current_user.id
+                ).first()
+                
+                if expense:
+                    expense.amount = amount
+                else:
+                    if amount > 0:
+                        expense = Expense(
+                            date=date,
+                            category=category,
+                            amount=amount,
+                            user_id=current_user.id
+                        )
+                        db.session.add(expense)
+                        
+            except ValueError:
+                return jsonify({'error': f'Invalid amount for category {category}'}), 400
+                
         db.session.commit()
-    return jsonify({'status': 'success'})
+        return jsonify({'status': 'success'})
+        
+    except Exception as e:
+        logger.error(f"Error adding expense: {str(e)}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'error': 'An error occurred while saving the expense'}), 500
 
 @app.route('/api/expenses')
 @login_required
@@ -419,34 +483,71 @@ def get_expenses():
     
     return jsonify({'error': 'Invalid date parameters'}), 400
 
+@app.route('/summary')
+@login_required
+def summary():
+    try:
+        current_month = datetime.now().strftime('%Y-%m')
+        budget = Budget.query.filter_by(
+            month=current_month,
+            user_id=current_user.id
+        ).first()
+        
+        if not budget:
+            flash('Please set up your monthly budget first.', 'warning')
+            return redirect(url_for('budget_setup'))
+            
+        return render_template('summary.html')
+    except Exception as e:
+        logger.error(f"Error in summary route: {str(e)}", exc_info=True)
+        flash('An error occurred while loading the summary page.', 'error')
+        return redirect(url_for('index'))
+
 @app.route('/api/summary')
+@login_required
 def get_summary():
-    current_month = datetime.now().strftime('%Y-%m')
-    budget = Budget.query.filter_by(month=current_month).first()
-    if not budget:
-        return jsonify({'error': 'Budget not set'}), 400
-    start_date = datetime.strptime(current_month, '%Y-%m').date()
-    end_date = start_date.replace(day=28) + timedelta(days=4)
-    expenses = Expense.query.filter(Expense.date >= start_date, Expense.date <= end_date).all()
-    category_totals = {}
-    total_spent = 0
-    for expense in expenses:
-        category_totals[expense.category] = category_totals.get(expense.category, 0) + expense.amount
-        total_spent += expense.amount
-    remaining_budget = budget.amount - total_spent
-    return jsonify({
-        'total_spent': total_spent,
-        'remaining_budget': remaining_budget,
-        'category_totals': category_totals
-    })
+    try:
+        current_month = datetime.now().strftime('%Y-%m')
+        budget = Budget.query.filter_by(
+            month=current_month,
+            user_id=current_user.id
+        ).first()
+        
+        if not budget:
+            return jsonify({'error': 'Budget not set'}), 400
+            
+        start_date = datetime.strptime(current_month, '%Y-%m').date()
+        end_date = start_date.replace(day=28) + timedelta(days=4)
+        
+        expenses = Expense.query.filter(
+            Expense.date >= start_date,
+            Expense.date <= end_date,
+            Expense.user_id == current_user.id
+        ).all()
+        
+        category_totals = {}
+        total_spent = 0
+        
+        for expense in expenses:
+            category_totals[expense.category] = category_totals.get(expense.category, 0) + expense.amount
+            total_spent += expense.amount
+            
+        remaining_budget = budget.amount - total_spent
+        
+        return jsonify({
+            'total_spent': total_spent,
+            'remaining_budget': remaining_budget,
+            'category_totals': category_totals,
+            'budget_amount': budget.amount
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_summary: {str(e)}", exc_info=True)
+        return jsonify({'error': 'An error occurred while fetching summary data'}), 500
 
 @app.route('/calendar')
 def calendar():
     return render_template('calendar.html')
-
-@app.route('/summary')
-def summary():
-    return render_template('summary.html')
 
 @app.route('/api/update_budget', methods=['POST'])
 @login_required
@@ -576,6 +677,12 @@ def budget_setup():
         flash('An unexpected error occurred. Please try again.', 'error')
         return redirect(url_for('budget_setup'))
 
+# Add this after login_user() calls
+@app.before_request
+def before_request():
+    if current_user.is_authenticated:
+        session.permanent = True  # Use permanent session
+
 # Initialize the application
 init_db()
 
@@ -592,3 +699,20 @@ if __name__ == '__main__':
     except Exception as e:
         logger.error(f"Failed to start application: {str(e)}", exc_info=True)
         raise
+
+def get_db():
+    """Get database connection with error handling"""
+    try:
+        if not hasattr(g, 'db'):
+            g.db = db
+        return g.db
+    except Exception as e:
+        logger.error(f"Database connection error: {str(e)}", exc_info=True)
+        raise
+
+@app.teardown_appcontext
+def close_db(error):
+    """Close database connection"""
+    db = g.pop('db', None)
+    if db is not None:
+        db.session.close()
