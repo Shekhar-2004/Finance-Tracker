@@ -40,10 +40,16 @@ csrf = CSRFProtect(app)
 if os.environ.get('FLASK_ENV') == 'production':
     # Render (PostgreSQL)
     database_url = os.environ.get('DATABASE_URL', '')
-    if database_url.startswith("postgres://"):
+    
+    # Check if DATABASE_URL is set and valid
+    if not database_url or database_url == 'your-postgres-url':
+        logger.error("Invalid DATABASE_URL in production mode. Using in-memory SQLite as fallback.")
+        database_url = 'sqlite:///:memory:'
+    elif database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
+    
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    logger.info("Using PostgreSQL database in production mode")
+    logger.info(f"Using database in production mode: {database_url.split('://')[0]}")
 else:
     # Local (SQLite)
     # Create instance directory if it doesn't exist
