@@ -269,8 +269,21 @@
     <script>
         async function loadSummary() {
             try {
-                const response = await fetch('/api/summary');
+                // Get current month in YYYY-MM format
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const currentMonth = `${year}-${month}`;
+                
+                // Fetch summary data with the month parameter
+                const response = await fetch(`/api/summary?month=${currentMonth}`);
                 const data = await response.json();
+                
+                // Check if there was an error
+                if (data.error) {
+                    console.error('API Error:', data.error);
+                    return;
+                }
                 
                 // Update statistics
                 document.getElementById('totalSpent').textContent = data.total_spent.toFixed(2);
@@ -295,49 +308,64 @@
 
                 // Create pie chart
                 const ctx = document.getElementById('pieChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: Object.keys(data.category_totals),
-                        datasets: [{
-                            data: Object.values(data.category_totals),
-                            backgroundColor: [
-                                '#4299E1',
-                                '#48BB78',
-                                '#ED8936',
-                                '#9F7AEA',
-                                '#F56565'
-                            ],
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                                labels: {
-                                    padding: 20,
-                                    font: {
-                                        family: 'Inter'
+                
+                // Only create the chart if there are expenses
+                if (Object.keys(data.category_breakdown).length > 0) {
+                    new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(data.category_breakdown),
+                            datasets: [{
+                                data: Object.values(data.category_breakdown),
+                                backgroundColor: [
+                                    '#4299E1',
+                                    '#48BB78',
+                                    '#ED8936',
+                                    '#9F7AEA',
+                                    '#F56565'
+                                ],
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        padding: 20,
+                                        font: {
+                                            family: 'Inter'
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        cutout: '60%'
-                    }
-                });
+                            },
+                            cutout: '60%'
+                        }
+                    });
+                } else {
+                    // Display a message when there are no expenses
+                    ctx.canvas.style.display = 'flex';
+                    ctx.canvas.style.justifyContent = 'center';
+                    ctx.canvas.style.alignItems = 'center';
+                    ctx.font = '16px Inter';
+                    ctx.fillStyle = '#4a5568';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('No expenses recorded this month', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                }
 
                 // Generate insights
                 const insightsDiv = document.getElementById('insights');
                 const categoryList = document.getElementById('categoryList');
                 
                 // Find highest spending category
-                const categories = Object.entries(data.category_totals)
+                const categories = Object.entries(data.category_breakdown)
                     .sort(([,a], [,b]) => b - a);
                 
-                const [topCategory, topAmount] = categories[0];
+                // Handle case when there are no expenses
+                const [topCategory, topAmount] = categories.length > 0 ? 
+                    categories[0] : ['None', 0];
 
                 insightsDiv.innerHTML = `
                     <div class="insight-item">
@@ -363,15 +391,18 @@
                 // Generate category list
                 categoryList.innerHTML = `
                     <h2>Category Breakdown</h2>
-                    ${categories.map(([category, amount]) => `
-                        <div class="category-item">
-                            <div class="category-name">
-                                <i class="material-icons">folder</i>
-                                ${category}
+                    ${categories.length > 0 ? 
+                        categories.map(([category, amount]) => `
+                            <div class="category-item">
+                                <div class="category-name">
+                                    <i class="material-icons">folder</i>
+                                    ${category}
+                                </div>
+                                <div class="category-amount">₹${amount.toFixed(2)}</div>
                             </div>
-                            <div class="category-amount">₹${amount.toFixed(2)}</div>
-                        </div>
-                    `).join('')}
+                        `).join('') : 
+                        '<div class="category-item">No expenses recorded this month</div>'
+                    }
                 `;
 
             } catch (error) {

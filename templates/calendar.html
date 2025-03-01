@@ -246,6 +246,7 @@
             const modalDate = document.getElementById('modalDate');
             const modalContent = document.getElementById('modalContent');
             
+            // Format the date for display
             modalDate.textContent = new Date(date).toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
@@ -253,29 +254,64 @@
                 day: 'numeric'
             });
             
+            // If expenses is an array (from calendar_events API), convert to object format
+            let expenseData = {};
+            let total = 0;
+            
+            if (Array.isArray(expenses)) {
+                // Group expenses by category
+                expenses.forEach(expense => {
+                    if (expense.category) {
+                        expenseData[expense.category] = expense.amount;
+                        total += parseFloat(expense.amount);
+                    }
+                });
+            } else {
+                // Object format from expenses API
+                expenseData = expenses;
+                for (const amount of Object.values(expenseData)) {
+                    total += parseFloat(amount);
+                }
+            }
+            
+            // Create the table
             let content = '<table class="expense-table">';
             content += '<thead><tr><th>Category</th><th>Amount</th></tr></thead><tbody>';
             
-            let total = 0;
-            for (const [category, amount] of Object.entries(expenses)) {
+            let hasExpenses = Object.keys(expenseData).length > 0;
+            
+            if (hasExpenses) {
+                for (const [category, amount] of Object.entries(expenseData)) {
+                    content += `<tr>
+                        <td>${category}</td>
+                        <td class="amount">₹${parseFloat(amount).toLocaleString('en-IN', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        })}</td>
+                    </tr>`;
+                }
+            } else {
+                content += `<tr><td colspan="2" style="text-align: center;">No expenses recorded for this date</td></tr>`;
+            }
+            
+            if (hasExpenses) {
                 content += `<tr>
-                    <td>${category}</td>
-                    <td class="amount">₹${parseFloat(amount).toLocaleString('en-IN', {
+                    <td>Total</td>
+                    <td class="amount">₹${total.toLocaleString('en-IN', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                     })}</td>
                 </tr>`;
-                total += parseFloat(amount);
             }
             
-            content += `<tr>
-                <td>Total</td>
-                <td class="amount">₹${total.toLocaleString('en-IN', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                })}</td>
-            </tr></tbody>`;
-            content += '</table>';
+            content += '</tbody></table>';
+            
+            // Add a link to add/edit expenses for this date
+            content += `<div style="text-align: center; margin-top: 1rem;">
+                <a href="/expense?date=${date}" style="display: inline-block; padding: 0.5rem 1rem; background: #4299e1; color: white; text-decoration: none; border-radius: 6px;">
+                    ${hasExpenses ? 'Edit Expenses' : 'Add Expenses'}
+                </a>
+            </div>`;
             
             modalContent.innerHTML = content;
             overlay.style.display = 'block';
@@ -292,38 +328,66 @@
                 headerToolbar: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'dayGridMonth,dayGridWeek,dayGridDay'
-                },
-                dateClick: function(info) {
-                    fetch(`/api/expenses?date=${info.dateStr}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            showExpenseModal(info.dateStr, data);
-                        })
-                        .catch(error => console.error('Error:', error));
+                    right: 'dayGridMonth,timeGridWeek'
                 },
                 events: function(info, successCallback, failureCallback) {
-                    fetch(`/api/expenses?start=${info.startStr}&end=${info.endStr}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            const events = [];
-                            for (const [date, expenseData] of Object.entries(data)) {
-                                events.push({
-                                    title: `₹${expenseData.total.toLocaleString('en-IN')}`,
-                                    start: date,
-                                    allDay: true,
-                                    backgroundColor: '#48bb78',
-                                    borderColor: '#48bb78',
-                                    description: Object.entries(expenseData.categories)
-                                        .map(([cat, amt]) => `${cat}: ₹${amt.toLocaleString('en-IN')}`)
-                                        .join('\n')
-                                });
+                    // Format dates for the API request
+                    const startDate = info.startStr;
+                    const endDate = info.endStr;
+                    
+                    fetch(`/api/calendar_events?start=${startDate}&end=${endDate}`)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok');
                             }
-                            successCallback(events);
+                            return response.json();
+                        })
+                        .then(data => {
+                            // The API returns events in the format expected by FullCalendar
+                            successCallback(data);
                         })
                         .catch(error => {
-                            console.error('Error:', error);
+                            console.error('Error fetching events:', error);
                             failureCallback(error);
+                        });
+                },
+                eventClick: function(info) {
+                    // Skip background events or totals
+                    if (info.event.display === 'background' || info.event.extendedProps.isTotal) {
+                        return;
+                    }
+                    
+                    const date = info.event.start.toISOString().split('T')[0];
+                    
+                    // If the event has expenses data already, use it
+                    if (info.event.extendedProps.expenses) {
+                        showExpenseModal(date, info.event.extendedProps.expenses);
+                        return;
+                    }
+                    
+                    // Otherwise fetch the expenses for this date
+                    fetch(`/api/expenses?start_date=${date}&end_date=${date}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            showExpenseModal(date, data);
+                        })
+                        .catch(error => {
+                            console.error('Error fetching expenses:', error);
+                            // Still show the modal, but with no expenses
+                            showExpenseModal(date, []);
+                        });
+                },
+                dateClick: function(info) {
+                    const clickedDate = info.dateStr;
+                    
+                    fetch(`/api/expenses?start_date=${clickedDate}&end_date=${clickedDate}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            showExpenseModal(clickedDate, data);
+                        })
+                        .catch(error => {
+                            console.error('Error fetching expenses:', error);
+                            showExpenseModal(clickedDate, []);
                         });
                 }
             });

@@ -486,19 +486,40 @@
         }
 
         // Initialize with today's date
-        window.addEventListener('DOMContentLoaded', function() {
-            dateInput.value = formatDateForInput(currentDate);
-            loadExpensesForDate(dateInput.value);
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize date input to today's date
+            const dateInput = document.getElementById('expenseDate');
+            const today = new Date();
             
-            // Also initialize the budget month field
-            const budgetMonth = document.getElementById('budgetMonth');
-            if (budgetMonth) {
-                const year = currentDate.getFullYear();
-                const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-                budgetMonth.value = `${year}-${month}`;
+            // Check if a date was passed from the server
+            const selectedDate = "{{ selected_date }}";
+            let currentDate;
+            
+            if (selectedDate && selectedDate !== "None") {
+                // Use the date from the URL parameter
+                currentDate = new Date(selectedDate);
+                if (isNaN(currentDate.getTime())) {
+                    // If invalid date, use today
+                    currentDate = today;
+                }
+            } else {
+                // No date parameter, use today
+                currentDate = today;
             }
             
-            // Initialize budget display
+            // Format date for input field (YYYY-MM-DD)
+            const formattedDate = currentDate.toISOString().split('T')[0];
+            dateInput.value = formattedDate;
+            
+            // Initialize budget month field
+            const budgetMonthField = document.getElementById('budgetMonth');
+            const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+            budgetMonthField.value = currentMonth;
+            
+            // Load expenses for the current date
+            loadExpensesForDate(formattedDate);
+            
+            // Update remaining budget display
             updateRemainingBudget();
         });
 
@@ -587,13 +608,14 @@
         // Update the remaining budget display
         async function updateRemainingBudget() {
             try {
-                // Get the current month
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
+                // Get the month from the date input
+                const dateStr = document.getElementById('expenseDate').value;
+                const dateParts = dateStr.split('-');
+                const year = parseInt(dateParts[0]);
+                const month = String(parseInt(dateParts[1])).padStart(2, '0');
                 const currentMonth = `${year}-${month}`;
                 
-                // Fetch the budget for the current month
+                // Fetch the budget for the selected month
                 const budgetResponse = await fetch(`/api/budget?month=${currentMonth}`);
                 
                 if (budgetResponse.ok) {
@@ -603,9 +625,9 @@
                     // Update the budget display
                     document.getElementById('currentBudget').textContent = budget.toFixed(2);
                     
-                    // Fetch all expenses for the current month
+                    // Fetch all expenses for the selected month
                     const startDate = `${currentMonth}-01`;
-                    const lastDay = new Date(year, month, 0).getDate();
+                    const lastDay = new Date(year, parseInt(month), 0).getDate();
                     const endDate = `${currentMonth}-${lastDay}`;
                     
                     const expensesResponse = await fetch(`/api/expenses?start_date=${startDate}&end_date=${endDate}`);

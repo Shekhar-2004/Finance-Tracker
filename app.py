@@ -367,11 +367,25 @@ def expense():
 
     app.logger.debug(f"Categories: {categories}")
 
+    # Check if date parameter is provided
+    selected_date = request.args.get('date')
+    if selected_date:
+        try:
+            # Validate the date format
+            datetime.fromisoformat(selected_date)
+        except ValueError:
+            # If invalid, ignore it and use current date
+            selected_date = None
+    
     # Get current month's budget
-    current_month = datetime.now(timezone.utc).strftime('%Y-%m')
+    if selected_date:
+        budget_month = selected_date[:7]  # Extract YYYY-MM from YYYY-MM-DD
+    else:
+        budget_month = datetime.now(timezone.utc).strftime('%Y-%m')
+    
     budget = Budget.query.filter_by(
         user_id=current_user.id,
-        month=current_month
+        month=budget_month
     ).first()
     
     # If no budget exists, redirect to budget setup
@@ -381,7 +395,8 @@ def expense():
 
     return render_template('expense.html', 
                           categories=categories,
-                          budget=budget)
+                          budget=budget,
+                          selected_date=selected_date)
 
 def get_categories():
     """Function to return expense categories"""
