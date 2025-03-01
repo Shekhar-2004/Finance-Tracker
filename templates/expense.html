@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Daily Expenses</title>
+    <title>Daily Expenses - Finance Tracker</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -472,140 +472,226 @@
         let currentDate = new Date();
         const dateInput = document.getElementById('expenseDate');
 
-        // Format date for input value (YYYY-MM-DD)
-        function formatDateForInput(date) {
+        // Format date for API requests (YYYY-MM-DD)
+        function formatDateForAPI(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
         }
 
+        // Format date for input field (YYYY-MM-DD)
+        function formatDateForInput(date) {
+            return formatDateForAPI(date);
+        }
+
         // Initialize with today's date
-        function initializeDate() {
-            currentDate = new Date(); // Always get fresh current date
+        window.addEventListener('DOMContentLoaded', function() {
             dateInput.value = formatDateForInput(currentDate);
-            resetExpenseValues(); // Reset all values to empty
             loadExpensesForDate(dateInput.value);
-        }
-
-        // New function to reset all expense values
-        function resetExpenseValues() {
-            categories.forEach(category => {
-                const input = document.getElementById(category);
-                if (input) {
-                    input.value = '';
-                    input.placeholder = '0.00';
-                }
-            });
-            document.getElementById('dailyTotal').textContent = '0.00';
-        }
-
-        // Update the loadExpensesForDate function
-        async function loadExpensesForDate(dateStr) {
-            if (dateStr === lastLoadedDate) {
-                return;
+            
+            // Also initialize the budget month field
+            const budgetMonth = document.getElementById('budgetMonth');
+            if (budgetMonth) {
+                const year = currentDate.getFullYear();
+                const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                budgetMonth.value = `${year}-${month}`;
             }
             
+            // Initialize budget display
+            updateRemainingBudget();
+        });
+
+        // Handle date change
+        function dateChanged() {
+            const newDateStr = dateInput.value;
+            if (newDateStr) {
+                // Parse the date string to a Date object
+                const parts = newDateStr.split('-');
+                currentDate = new Date(
+                    parseInt(parts[0]),
+                    parseInt(parts[1]) - 1,
+                    parseInt(parts[2])
+                );
+                
+                loadExpensesForDate(newDateStr);
+            }
+        }
+
+        // Navigate to previous day
+        async function previousDay() {
+            currentDate.setDate(currentDate.getDate() - 1);
+            dateInput.value = formatDateForInput(currentDate);
+            await loadExpensesForDate(dateInput.value);
+        }
+
+        // Navigate to next day
+        async function nextDay() {
+            currentDate.setDate(currentDate.getDate() + 1);
+            dateInput.value = formatDateForInput(currentDate);
+            await loadExpensesForDate(dateInput.value);
+        }
+
+        // Load expenses for a specific date
+        async function loadExpensesForDate(dateStr) {
             try {
-                // First reset all values
-                resetExpenseValues();
-
-                const response = await fetch(`/api/expenses?date=${dateStr}`);
-                const data = await response.json();
-
-                // Only set values if there are existing expenses
-                for (const [category, amount] of Object.entries(data)) {
-                    const input = document.getElementById(category);
-                    if (input && amount > 0) {
-                        input.value = amount;
+                // Convert the date string to a Date object
+                const dateParts = dateStr.split('-');
+                const year = parseInt(dateParts[0]);
+                const month = parseInt(dateParts[1]) - 1; // JS months are 0-indexed
+                const day = parseInt(dateParts[2]);
+                const date = new Date(year, month, day);
+                
+                // Format date for API request
+                const formattedDate = formatDateForAPI(date);
+                
+                // Clear previous values
+                categories.forEach(category => {
+                    document.getElementById(category).value = '';
+                });
+                
+                // Fetch expenses for this date
+                const response = await fetch(`/api/expenses?start_date=${formattedDate}&end_date=${formattedDate}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // If we have data for this date, populate the form
+                    if (data[formattedDate]) {
+                        const expenses = data[formattedDate];
+                        
+                        // Set values for each category
+                        categories.forEach(category => {
+                            if (expenses[category]) {
+                                document.getElementById(category).value = expenses[category];
+                            }
+                        });
                     }
+                    
+                    // Update the daily total
+                    calculateDailyTotal();
+                    
+                    // Update the remaining budget
+                    await updateRemainingBudget();
+                    
+                    // Update last loaded date
+                    lastLoadedDate = formattedDate;
+                } else {
+                    console.error('Failed to load expenses');
                 }
-
-                calculateDailyTotal();
-                await updateRemainingBudget();
-                lastLoadedDate = dateStr;
             } catch (error) {
                 console.error('Error loading expenses:', error);
             }
         }
 
-        // Optimize the updateRemainingBudget function with debouncing
-        const debounce = (func, wait) => {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        };
-
-        const updateRemainingBudget = debounce(async () => {
+        // Update the remaining budget display
+        async function updateRemainingBudget() {
             try {
-            const response = await fetch('/api/summary');
-            const data = await response.json();
-            document.getElementById('remainingBudget').textContent = data.remaining_budget.toFixed(2);
-                document.getElementById('currentBudget').textContent = (data.remaining_budget + data.total_spent).toFixed(2);
+                // Get the current month
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const currentMonth = `${year}-${month}`;
+                
+                // Fetch the budget for the current month
+                const budgetResponse = await fetch(`/api/budget?month=${currentMonth}`);
+                
+                if (budgetResponse.ok) {
+                    const budgetData = await budgetResponse.json();
+                    const budget = parseFloat(budgetData.amount);
+                    
+                    // Update the budget display
+                    document.getElementById('currentBudget').textContent = budget.toFixed(2);
+                    
+                    // Fetch all expenses for the current month
+                    const startDate = `${currentMonth}-01`;
+                    const lastDay = new Date(year, month, 0).getDate();
+                    const endDate = `${currentMonth}-${lastDay}`;
+                    
+                    const expensesResponse = await fetch(`/api/expenses?start_date=${startDate}&end_date=${endDate}`);
+                    
+                    if (expensesResponse.ok) {
+                        const expensesData = await expensesResponse.json();
+                        
+                        // Calculate total spent this month
+                        let totalSpent = 0;
+                        
+                        for (const dateKey in expensesData) {
+                            const dateExpenses = expensesData[dateKey];
+                            for (const category in dateExpenses) {
+                                totalSpent += parseFloat(dateExpenses[category]);
+                            }
+                        }
+                        
+                        // Calculate remaining budget
+                        const remaining = budget - totalSpent;
+                        
+                        // Update the display
+                        document.getElementById('remainingBudget').textContent = remaining.toFixed(2);
+                        
+                        // Change color based on remaining amount
+                        const remainingElement = document.getElementById('remainingBudget');
+                        if (remaining < 0) {
+                            remainingElement.style.color = '#e53e3e'; // Red for negative
+                        } else if (remaining < budget * 0.2) {
+                            remainingElement.style.color = '#dd6b20'; // Orange for low
+                        } else {
+                            remainingElement.style.color = '#38a169'; // Green for good
+                        }
+                    }
+                }
             } catch (error) {
-                console.error('Error updating budget:', error);
-            }
-        }, 300); // Wait 300ms between updates
-
-        // Update the dateChanged function
-        async function dateChanged() {
-            const newDate = dateInput.value;
-            if (newDate !== lastLoadedDate) {
-                currentDate = new Date(newDate);
-                await loadExpensesForDate(newDate);
+                console.error('Error updating remaining budget:', error);
             }
         }
 
-        // Update the submitExpenses function
+        // Submit expenses for the current date
         async function submitExpenses() {
-            const expenseData = {};
-            let hasChanges = false;
-            
-            categories.forEach(category => {
-                const inputElement = document.getElementById(category);
-                if (inputElement && inputElement.value !== '') {
-                    expenseData[category] = inputElement.value;
-                    hasChanges = true;
-                } else {
-                    expenseData[category] = '0';
-                }
-            });
-
-            if (!hasChanges) {
-                return;
-            }
-
-            const data = {
-                date: dateInput.value,
-                categories: expenseData
-            };
-
             try {
-                const response = await fetch('/add_expense', {
-                method: 'POST',
-                    headers: { 
+                // Get the current date from the input
+                const dateStr = document.getElementById('expenseDate').value;
+                
+                // Prepare expenses data
+                const expenses = {};
+                let hasExpenses = false;
+                
+                categories.forEach(category => {
+                    const value = document.getElementById(category).value;
+                    if (value && parseFloat(value) > 0) {
+                        expenses[category] = parseFloat(value);
+                        hasExpenses = true;
+                    }
+                });
+                
+                if (!hasExpenses) {
+                    alert('Please enter at least one expense amount');
+                    return;
+                }
+                
+                // Send data to server
+                const response = await fetch('/api/expenses', {
+                    method: 'POST',
+                    headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
                     },
-                body: JSON.stringify(data)
-            });
-
+                    body: JSON.stringify({
+                        date: dateStr,
+                        expenses: expenses
+                    })
+                });
+                
                 if (response.ok) {
-            await updateRemainingBudget();
-                    // Show success message
-                    const successMessage = document.createElement('div');
-                    successMessage.className = 'success-message';
-                    successMessage.textContent = 'Expenses saved successfully!';
-                    document.querySelector('.container').prepend(successMessage);
-                    setTimeout(() => successMessage.remove(), 3000);
+                    alert('Expenses saved successfully!');
+                    
+                    // Update the daily total
+                    calculateDailyTotal();
+                    
+                    // Update the remaining budget
+                    await updateRemainingBudget();
                 } else {
-                    throw new Error('Failed to save expenses');
+                    const error = await response.json();
+                    alert(error.message || 'Failed to save expenses. Please try again.');
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -613,14 +699,17 @@
             }
         }
 
-        // Initialize calculations when the page loads
-        calculateDailyTotal();
-        updateRemainingBudget();
-
         function showBudgetModal() {
             const modal = document.getElementById('budgetModal');
             const budgetInput = document.getElementById('newBudget');
+            const budgetMonth = document.getElementById('budgetMonth');
             const currentBudget = document.getElementById('currentBudget').textContent;
+            
+            // Set current month as default
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            budgetMonth.value = `${year}-${month}`;
             
             budgetInput.value = currentBudget;
             modal.classList.add('show');
@@ -682,34 +771,6 @@
             if (event.key === 'Enter') {
                 event.preventDefault();
                 updateBudget();
-            }
-        });
-
-        // Navigate to previous day
-        async function previousDay() {
-            currentDate.setDate(currentDate.getDate() - 1);
-            dateInput.value = formatDateForInput(currentDate);
-            await loadExpensesForDate(dateInput.value);
-        }
-
-        // Navigate to next day
-        async function nextDay() {
-            currentDate.setDate(currentDate.getDate() + 1);
-            dateInput.value = formatDateForInput(currentDate);
-            await loadExpensesForDate(dateInput.value);
-        }
-
-        // Initialize date and load expenses when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeDate(); // This will set today's date and reset values
-        });
-
-        // Add keyboard navigation
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowLeft') {
-                previousDay();
-            } else if (e.key === 'ArrowRight') {
-                nextDay();
             }
         });
     </script>

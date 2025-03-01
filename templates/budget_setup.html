@@ -252,7 +252,8 @@
                        name="month" 
                        required 
                        placeholder="Select month"
-                       autocomplete="off">
+                       autocomplete="off"
+                       value="{{ current_month }}">
             </div>
 
             <div class="budget-input-container">
@@ -296,12 +297,32 @@
     </div>
 
     <script>
+        // Set current month as default if not already set
+        window.addEventListener('DOMContentLoaded', function() {
+            const monthInput = document.getElementById('month');
+            if (!monthInput.value) {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                monthInput.value = `${year}-${month}`;
+            }
+        });
+
         // Enhanced form validation
         document.querySelector('form').addEventListener('submit', function(e) {
             e.preventDefault(); // Prevent default form submission
             
+            const monthInput = document.getElementById('month');
             const budgetInput = document.getElementById('budget');
             const budget = parseFloat(budgetInput.value);
+            
+            // Validate month format (YYYY-MM)
+            const monthRegex = /^\d{4}-\d{2}$/;
+            if (!monthRegex.test(monthInput.value)) {
+                alert('Please select a valid month');
+                monthInput.focus();
+                return false;
+            }
             
             if (isNaN(budget) || budget <= 0) {
                 alert('Please enter a valid budget amount greater than 0');
