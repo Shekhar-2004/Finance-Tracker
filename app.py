@@ -39,18 +39,18 @@ csrf = CSRFProtect(app)
 
 # Database configuration
 if os.environ.get('FLASK_ENV') == 'production':
-    # Render (PostgreSQL)
     database_url = os.environ.get('DATABASE_URL', '')
     
     if not database_url:
-        logger.error("DATABASE_URL not set in production mode!")
-    else:
-        # Required for Render PostgreSQL compatibility
-        if database_url.startswith("postgres://"):
-            database_url = database_url.replace("postgres://", "postgresql://", 1)
+        logger.error("❌ FATAL ERROR: DATABASE_URL not set in production!")
+        raise RuntimeError("DATABASE_URL environment variable is required in production")
+
+    # Force PostgreSQL format
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
     
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    logger.info(f"Production database configured: {database_url.split('://')[0]}")
+    logger.info(f"✅ Production database: {database_url.split('://')[0]}")
 else:
     # Local (SQLite)
     # Create instance directory if it doesn't exist
