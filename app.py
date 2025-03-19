@@ -17,6 +17,7 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, ValidationError
 from sqlalchemy.orm import Session
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -41,15 +42,15 @@ if os.environ.get('FLASK_ENV') == 'production':
     # Render (PostgreSQL)
     database_url = os.environ.get('DATABASE_URL', '')
     
-    # Check if DATABASE_URL is set and valid
-    if not database_url or database_url == 'your-postgres-url':
-        logger.error("Invalid DATABASE_URL in production mode. Using in-memory SQLite as fallback.")
-        database_url = 'sqlite:///:memory:'
-    elif database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    if not database_url:
+        logger.error("DATABASE_URL not set in production mode!")
+    else:
+        # Required for Render PostgreSQL compatibility
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql://", 1)
     
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    logger.info(f"Using database in production mode: {database_url.split('://')[0]}")
+    logger.info(f"Production database configured: {database_url.split('://')[0]}")
 else:
     # Local (SQLite)
     # Create instance directory if it doesn't exist
@@ -80,6 +81,13 @@ app.config.update(
 
 # Initialize extensions
 db = SQLAlchemy(app)
+with app.app_context():
+    try:
+        db.create_all()
+        logger.info("Initialized database tables")
+    except Exception as e:
+        logger.error(f"Database initialization error: {str(e)}")
+        logger.error(traceback.format_exc())
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
