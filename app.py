@@ -88,6 +88,7 @@ with app.app_context():
     except Exception as e:
         logger.error(f"Database initialization error: {str(e)}")
         logger.error(traceback.format_exc())
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -271,6 +272,10 @@ class RegistrationForm(FlaskForm):
         user = User.query.filter_by(email=email.data.lower()).first()
         if user:
             raise ValidationError('Email already registered')
+        
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy"}), 200
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

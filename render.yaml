@@ -19,7 +19,9 @@ services:
       - key: PORT
         value: 10000
       - key: DATABASE_URL
-        value: postgresql://finance_tracker_c8v6_user:hbjDOlUvjBc7fQHpUWXwXz3w7PXGl5Ea@dpg-cvdgsrt6l47c73946et0-a/finance_tracker_c8v6
+        fromDatabase:
+          name: finance-tracker-db
+          property: connectionString
 
 databases:
   - name: finance-tracker-db
