@@ -107,6 +107,7 @@ SECRET_KEY	A secret key for securing sessions (required).
 DATABASE_URL	PostgreSQL connection string (required for production).
 FLASK_ENV	Set to development for local development or production for deployment.
 FLASK_DEBUG	Set to false in production for better performance and security.
+
 📜 License
 
 This project is licensed under the MIT License. Feel free to use, modify, and distribute it as per the license terms.
@@ -130,9 +131,9 @@ This application is hosted on Render's free tier, which has limitations on data 
 
 🔗 Links
 
-    Live Application: Finance Tracker
+    Live Application: https://finance-tracker-pxk6.onrender.com
 
-    GitHub Repository: Finance Tracker GitHub Repo
+    GitHub Repository: https://github.com/Shekhar-2004/Finance-Tracker
 
 🙏 Acknowledgments
 
