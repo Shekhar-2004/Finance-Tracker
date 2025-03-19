@@ -44,3 +44,6 @@ Thumbs.db
 
 # Environment
 .env 
+
+#DATABASE
+.yaml
