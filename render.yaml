@@ -6,7 +6,6 @@ services:
       pip install -r requirements.txt
       flask db upgrade
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
-    # ... rest unchanged ...
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -22,8 +21,10 @@ services:
         fromDatabase:
           name: finance-tracker-db
           property: connectionString
+    healthCheckPath: /health
+    autoDeploy: true
 
 databases:
   - name: finance-tracker-db
     databaseName: finance_tracker
-    plan: free 
+    plan: free
